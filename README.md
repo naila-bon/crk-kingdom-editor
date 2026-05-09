@@ -26,7 +26,7 @@ Create your own at:
 ## Tech Stack
 
 * **Frontend**: React + TypeScript (Vite)
-* **Canvas Engine**: react-konva (Konva.js)
+- **Rendering Engine:** PixiJS
 * **UI Library**: Chakra UI
 * **State Management**: Zustand
 
@@ -54,21 +54,12 @@ npm run dev
 
 ```
 src/
- ├── components/
- │    ├── Canvas/
- │    ├── Toolbar/
- │    ├── ItemPicker/
- │
- ├── store/
- │    └── useEditorStore.ts
- │
- ├── data/
- │    └── items.json
- │
- ├── utils/
- │    ├── grid.ts
- │    ├── collision.ts
- │    └── export.ts
+│
+├── components/
+│
+├── store/
+│
+└── assets/
 ```
 
 ---
