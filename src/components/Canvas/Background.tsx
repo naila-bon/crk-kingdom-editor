@@ -1,14 +1,14 @@
 import { Graphics } from 'pixi.js'
-import { useCallback } from 'react'
+import { useCallback, type FC } from 'react'
 
 export const BG_COLOR = "#478115"
 
-interface BackgroundProps {
+type BackgroundProps = {
   width: number
   height: number
 }
 
-export const Background = ({ width, height }: BackgroundProps) => {
+export const Background : FC<BackgroundProps> = ({ width, height }) => {
   const draw = useCallback(
     (g: Graphics) => {
       g.clear()
