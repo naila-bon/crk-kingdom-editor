@@ -35,14 +35,20 @@ const MATRIX_COLS = MATRIX[0].length
 const MATRIX_COL_OFFSET = Math.floor(MATRIX_COLS / 2)
 const MATRIX_ROW_OFFSET = Math.floor(MATRIX_ROWS / 2)
 
-export const Grid: FC = () => {
+type GridProps = {
+  offsetX?: number
+  offsetY?: number
+}
 
-  const offsetX = Math.floor(
-    (typeof window !== 'undefined' ? window.innerWidth : 0) / 2,
-  )
-  const offsetY = Math.floor(
-    (typeof window !== 'undefined' ? window.innerHeight : 0) / 2,
-  )
+export const Grid: FC<GridProps> = ({ offsetX: propOffsetX, offsetY: propOffsetY }) => {
+
+  const offsetX = typeof propOffsetX === 'number'
+    ? propOffsetX
+    : Math.floor((typeof window !== 'undefined' ? window.innerWidth : 0) / 2)
+
+  const offsetY = typeof propOffsetY === 'number'
+    ? propOffsetY
+    : Math.floor((typeof window !== 'undefined' ? window.innerHeight : 0) / 2)
 
   const draw = useCallback(
     (g: Graphics) => {

@@ -1,9 +1,12 @@
-import { Box } from '@chakra-ui/react'
+import { Box, IconButton } from '@chakra-ui/react'
+import { useState } from 'react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
 import layoutImage from './assets/crk_layout/crk_layout.png'
+import { Eye } from 'lucide-react'
 
 function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   return (
     <Box
@@ -14,18 +17,37 @@ function App() {
       bgSize="contain"
       bgRepeat="no-repeat"
     >
-      <PixiCanvas />
-
       <Box
+        data-map-area="true"
         position="absolute"
+        minH="100vh"
+        w="full"
         inset={0}
-        pointerEvents="none"
-        display="flex"
-        alignItems="stretch"
+        overflow="hidden"
+        zIndex={0}
       >
-        <Box w={{ base: 'full', md: '420px' }} pointerEvents="auto" h="full">
-          <DecorBrowser />
-        </Box>
+        <PixiCanvas />
+      </Box>
+
+      <Box position="relative" h="100vh">
+        {sidebarOpen ? (
+          <Box
+            data-sidebar="decor-browser"
+            position="absolute"
+            top={0}
+            right={0}
+            bottom={0}
+            w="420px"
+            pointerEvents="auto"
+            zIndex={2}
+          >
+            <DecorBrowser onClose={() => setSidebarOpen(false)} />
+          </Box>
+        ) : (
+          <Box position="absolute" top={3} right={3} zIndex={3}>
+            <IconButton aria-label="Open" position="absolute" top={3} right={3} size="sm" zIndex={5} onClick={() => setSidebarOpen(true)}><Eye /></IconButton>
+          </Box>
+        )}
       </Box>
     </Box>
   )

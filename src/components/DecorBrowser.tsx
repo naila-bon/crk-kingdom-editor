@@ -11,8 +11,10 @@ import {
   Text,
   VStack,
   SimpleGrid,
+  IconButton,
 } from '@chakra-ui/react'
 import decorations from '../../scripts/crk_decors_avec_noms_843.json'
+import { EyeClosed } from 'lucide-react'
 
 type Decoration = {
   name: string
@@ -30,7 +32,7 @@ const categories = Array.from(new Set(items.map((item) => item.theme))).sort((le
   left.localeCompare(right),
 )
 
-export function DecorBrowser() {
+export function DecorBrowser({ onClose }: { onClose?: () => void }) {
   const [selectedCategory, setSelectedCategory] = useState('')
   const [view, setView] = useState<'categories' | 'decorations'>('categories')
 
@@ -42,30 +44,30 @@ export function DecorBrowser() {
     <Box
       w="full"
       h="full"
-      bg="rgba(11, 15, 23, 0.82)"
+      position="relative"
       color="white"
-      borderRight="1px solid"
-      borderColor="whiteAlpha.200"
-      backdropFilter="blur(18px)"
       p={4}
       overflow="hidden"
     >
-      <Stack direction="column" gap={4} h="full">
+      {onClose ? (
+        <IconButton aria-label="Close" position="absolute" top={6} right={6} size="sm" zIndex={5} onClick={onClose}><EyeClosed /></IconButton>
+      ) : null}
+      <Stack direction="column" gap={4} h="full" >
         { ! selectedCategory ? (
           <Box
             w="full"
             rounded="3xl"
             border="1px solid"
             borderColor="whiteAlpha.200"
-            bg="whiteAlpha.100"
+            bg="rgba(11, 15, 23, 1)"
             p={5}
             shadow="xl"
           >
             <VStack align="stretch" gap={4}>
               <Box>
-                <Heading size="lg">Catégories</Heading>
+                <Heading size="lg">Collections</Heading>
                 <Text color="whiteAlpha.700" mt={1}>
-                  Clique sur une catégorie pour afficher les décors associés.
+                  Click on a collection to display the associated decorations.
                 </Text>
               </Box>
 
@@ -101,12 +103,19 @@ export function DecorBrowser() {
           </Box>
         ): null}  
 
-        <Box flex="1" minW={0}>
+        <Box flex="1" minW={0}             
+            w="full"
+            rounded="3xl"
+            border="1px solid"
+            borderColor="whiteAlpha.200"
+            bg="rgba(11, 15, 23, 1)"
+            p={5}
+            shadow="xl">
           { selectedCategory ? (
             <>
               <HStack mb={4} gap={3} align="center" >
                 <Button variant="ghost" size="sm" onClick={() => { setView('categories'); setSelectedCategory('') }}>
-                  Catégories
+                  Collections
                 </Button>
                 <Text color="whiteAlpha.500">›</Text>
                 <Heading size="md">{selectedCategory}</Heading>
@@ -116,7 +125,7 @@ export function DecorBrowser() {
                 <Box>
                   <Heading size="2xl">{selectedCategory}</Heading>
                   <Text color="whiteAlpha.700" mt={1}>
-                    {filteredDecorations.length} décor{filteredDecorations.length > 1 ? 's' : ''} trouvé{filteredDecorations.length > 1 ? 's' : ''}
+                    {filteredDecorations.length} decoration{filteredDecorations.length > 1 ? 's' : ''} found
                   </Text>
                 </Box>
               </HStack>
