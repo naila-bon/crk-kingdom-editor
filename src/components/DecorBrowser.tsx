@@ -1,0 +1,170 @@
+import { useState } from 'react'
+
+import {
+  Badge,
+  Box,
+  Button,
+  Heading,
+  HStack,
+  Image,
+  Stack,
+  Text,
+  VStack,
+  SimpleGrid,
+} from '@chakra-ui/react'
+import decorations from '../../scripts/crk_decors_avec_noms_843.json'
+
+type Decoration = {
+  name: string
+  theme: string
+  size: string
+  points: string
+  note?: string
+  color?: string
+  imageUrl?: string
+}
+
+const items = decorations as Decoration[]
+
+const categories = Array.from(new Set(items.map((item) => item.theme))).sort((left, right) =>
+  left.localeCompare(right),
+)
+
+export function DecorBrowser() {
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [view, setView] = useState<'categories' | 'decorations'>('categories')
+
+  const filteredDecorations = selectedCategory
+    ? items.filter((item) => item.theme === selectedCategory)
+    : []
+
+  return (
+    <Box
+      w="full"
+      h="full"
+      bg="rgba(11, 15, 23, 0.82)"
+      color="white"
+      borderRight="1px solid"
+      borderColor="whiteAlpha.200"
+      backdropFilter="blur(18px)"
+      p={4}
+      overflow="hidden"
+    >
+      <Stack direction="column" gap={4} h="full">
+        { ! selectedCategory ? (
+          <Box
+            w="full"
+            rounded="3xl"
+            border="1px solid"
+            borderColor="whiteAlpha.200"
+            bg="whiteAlpha.100"
+            p={5}
+            shadow="xl"
+          >
+            <VStack align="stretch" gap={4}>
+              <Box>
+                <Heading size="lg">Catégories</Heading>
+                <Text color="whiteAlpha.700" mt={1}>
+                  Clique sur une catégorie pour afficher les décors associés.
+                </Text>
+              </Box>
+
+              <VStack align="stretch" gap={2} maxH="80vh" overflowY="auto" pr={1} minW={0}>
+                {categories.map((category) => {
+                  const isActive = category === selectedCategory
+
+                  return (
+                    <Button
+                      key={category}
+                      onClick={() => {
+                        setSelectedCategory(category)
+                        setView('decorations')
+                      }}
+                      justifyContent="space-between"
+                      variant={isActive ? 'solid' : 'subtle'}
+                      colorPalette={isActive ? 'cyan' : 'gray'}
+                      size="lg"
+                      rounded="2xl"
+                      fontWeight="semibold"
+                      bg={isActive ? 'cyan.500' : 'whiteAlpha.100'}
+                      _hover={{ bg: isActive ? 'cyan.400' : 'whiteAlpha.200' }}
+                    >
+                      {category}
+                      <Badge ml={3} colorPalette={isActive ? 'cyan' : 'gray'}>
+                        {items.filter((item) => item.theme === category).length}
+                      </Badge>
+                    </Button>
+                  )
+                })}
+              </VStack>
+            </VStack>
+          </Box>
+        ): null}  
+
+        <Box flex="1" minW={0}>
+          { selectedCategory ? (
+            <>
+              <HStack mb={4} gap={3} align="center" >
+                <Button variant="ghost" size="sm" onClick={() => { setView('categories'); setSelectedCategory('') }}>
+                  Catégories
+                </Button>
+                <Text color="whiteAlpha.500">›</Text>
+                <Heading size="md">{selectedCategory}</Heading>
+              </HStack>
+
+              <HStack justify="space-between" align="center" mb={5}>
+                <Box>
+                  <Heading size="2xl">{selectedCategory}</Heading>
+                  <Text color="whiteAlpha.700" mt={1}>
+                    {filteredDecorations.length} décor{filteredDecorations.length > 1 ? 's' : ''} trouvé{filteredDecorations.length > 1 ? 's' : ''}
+                  </Text>
+                </Box>
+              </HStack>
+
+              <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} maxH="80vh" overflowY="auto" pr={1} >
+                {filteredDecorations.map((decoration) => (
+                  <Box
+                    key={`${decoration.theme}-${decoration.name}`}
+                    rounded="2xl"
+                    border="1px solid"
+                    borderColor="whiteAlpha.200"
+                    bg="whiteAlpha.100"
+                    overflow="hidden"
+                    shadow="lg"
+                  >
+                    <Box aspectRatio={1} bg="blackAlpha.300">
+                      {decoration.imageUrl ? (
+                        <Image src={decoration.imageUrl} alt={decoration.name} objectFit="contain" w="full" h="full" />
+                      ) : null}
+                    </Box>
+
+                    <VStack align="stretch" gap={3} p={4}>
+                      <Box>
+                        <Heading size="md">{decoration.name}</Heading>
+                        <Text color="whiteAlpha.700" fontSize="sm">
+                          {decoration.theme}
+                        </Text>
+                      </Box>
+
+                      <HStack wrap="wrap" gap={2}>
+                        <Badge colorPalette="cyan">{decoration.size}</Badge>
+                        <Badge colorPalette="orange">{decoration.points} pts</Badge>
+                        {decoration.color ? <Badge colorPalette="purple">{decoration.color}</Badge> : null}
+                      </HStack>
+
+                      {decoration.note ? (
+                        <Text fontSize="sm" color="whiteAlpha.700">
+                          {decoration.note}
+                        </Text>
+                      ) : null}
+                    </VStack>
+                  </Box>
+                ))}
+              </SimpleGrid>
+            </>
+          ) : null}
+        </Box>
+      </Stack>
+    </Box>
+  )
+}
