@@ -26,6 +26,7 @@ Create your own at:
 ## Tech Stack
 
 * **Frontend**: React + TypeScript (Vite)
+* **Database**: PostgreSQL (Adminer)
 - **Rendering Engine:** PixiJS
 * **UI Library**: Chakra UI
 * **State Management**: Zustand
@@ -41,6 +42,12 @@ git clone https://github.com/naila-bon/crk-kingdom-editor
 # Go into the project
 cd crk-kingdom-editor
 
+# Start database server
+docker compose up -d 
+
+# Load data
+npm run db:import -- --file file.json --table crk_decors
+
 # Install dependencies
 npm install
 
@@ -54,6 +61,8 @@ npm run dev
 
 ```
 src/
+│
+├── scripts/
 │
 ├── components/
 │
@@ -94,6 +103,42 @@ stageRef.current.toDataURL()
 * Items are stored in a local JSON file (`items.json`)
 * User layouts are saved in **localStorage**
 * Future improvements may include backend persistence
+
+## PostgreSQL Import
+
+This repository now includes a small PostgreSQL import path for JSON data.
+
+1. Start PostgreSQL:
+
+```bash
+npm run db:up
+```
+
+2. Copy `.env.example` to `.env` and adjust the connection values if needed.
+
+3. Import a JSON file into the default `imported_json` table:
+
+```bash
+npm run db:import -- --file ./data.json
+```
+
+If the file contains an array, each element becomes one row. If the file contains a single object, it is stored as one row. The original JSON is kept in a `JSONB` column so the structure stays flexible.
+
+## Database UI
+
+Adminer is available once the Docker services are running:
+
+```bash
+docker compose up -d
+```
+
+Open http://localhost:8080 and use these connection settings:
+
+* System: PostgreSQL
+* Server: postgres
+* Username: postgres
+* Password: postgres
+* Database: crk_kingdom
 
 ---
 
