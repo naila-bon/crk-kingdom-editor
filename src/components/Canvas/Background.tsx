@@ -1,5 +1,7 @@
 import { Graphics } from 'pixi.js'
 import { useCallback, type FC } from 'react'
+// Background only draws the tile mask overlay; the fixed image sprite
+// is rendered from PixiCanvas to avoid duplication/tinting issues.
 import {
   TILE_WIDTH,
   TILE_HEIGHT,
@@ -64,7 +66,7 @@ export const Background: FC<BackgroundProps> = ({ width, height }) => {
 
           const { x, y } = isoToScreen(col, row, offsetX, offsetY)
 
-          g.beginFill(color)
+          g.beginFill(color, 0)
             .moveTo(x, y - TILE_H / 2)
             .lineTo(x + TILE_W / 2, y)
             .lineTo(x, y + TILE_H / 2)
@@ -77,5 +79,9 @@ export const Background: FC<BackgroundProps> = ({ width, height }) => {
     [width, height, offsetX, offsetY],
   )
 
-  return <pixiGraphics draw={draw} />
+  return (
+    <>
+      <pixiGraphics draw={draw} />
+    </>
+  )
 }
