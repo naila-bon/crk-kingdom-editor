@@ -8,6 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:dev": "sh script/start",
+    "docker:reset": "docker compose down -v && rm -f .env && cp .env.example .env",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:import": "node scripts/import-json-to-postgres.js"
