@@ -34,7 +34,6 @@ const categories = Array.from(new Set(items.map((item) => item.theme))).sort((le
 
 export function DecorBrowser({ onClose }: { onClose?: () => void }) {
   const [selectedCategory, setSelectedCategory] = useState('')
-  const [view, setView] = useState<'categories' | 'decorations'>('categories')
 
   const filteredDecorations = selectedCategory
     ? items.filter((item) => item.theme === selectedCategory)
@@ -80,7 +79,6 @@ export function DecorBrowser({ onClose }: { onClose?: () => void }) {
                       key={category}
                       onClick={() => {
                         setSelectedCategory(category)
-                        setView('decorations')
                       }}
                       justifyContent="space-between"
                       variant={isActive ? 'solid' : 'subtle'}
@@ -114,7 +112,7 @@ export function DecorBrowser({ onClose }: { onClose?: () => void }) {
           { selectedCategory ? (
             <>
               <HStack mb={4} gap={3} align="center" >
-                <Button variant="ghost" size="sm" onClick={() => { setView('categories'); setSelectedCategory('') }}>
+                <Button variant="ghost" size="sm" onClick={() => { setSelectedCategory('') }}>
                   Collections
                 </Button>
                 <Text color="whiteAlpha.500">›</Text>
