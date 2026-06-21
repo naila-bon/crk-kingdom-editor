@@ -26,7 +26,7 @@ type Decoration = {
   imageUrl?: string
 }
 
-const items = decorations as Decoration[]
+const items = decorations as unknown as Decoration[]
 
 const categories = Array.from(new Set(items.map((item) => item.theme))).sort((left, right) =>
   left.localeCompare(right),
