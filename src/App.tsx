@@ -2,7 +2,7 @@ import { Box, IconButton } from '@chakra-ui/react'
 import { useState } from 'react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
-import layoutImage from './assets/crk_layout/crk_layout.png'
+import layoutImage from 'src/assets/crk_layout/crk_layout.png'
 import { Eye } from 'lucide-react'
 
 function App() {
