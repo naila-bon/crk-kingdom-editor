@@ -35,6 +35,8 @@ Create your own at:
 
 ## Installation
 
+### Option 1 — Dockerized startup (recommended)
+
 ```bash
 # Clone the repository
 git clone https://github.com/naila-bon/crk-kingdom-editor
@@ -42,16 +44,34 @@ git clone https://github.com/naila-bon/crk-kingdom-editor
 # Go into the project
 cd crk-kingdom-editor
 
-# Start database server
-docker compose up -d 
+# Create the environment file (if needed)
+cp .env.example .env
 
-# Load data
-npm run db:import -- --file file.json --table crk_decors
+# Start the full stack
+npm run docker:dev
 
+# Or run the script directly
+./script/start
+```
+
+This starts:
+- the Vite app on http://localhost:5173
+- PostgreSQL on http://localhost:5432
+- Adminer on http://localhost:8080
+
+### Option 2 — Local startup
+
+```bash
 # Install dependencies
 npm install
 
-# Run dev server
+# Start only the database
+npm run db:up
+
+# Load data
+npm run db:import -- --file ./scripts/crk_decors_avec_noms_843.json --table crk_decors
+
+# Run frontend locally
 npm run dev
 ```
 
