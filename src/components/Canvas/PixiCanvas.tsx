@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react
 import { Container, Graphics, type FederatedPointerEvent, Sprite as PixiSprite } from 'pixi.js'
 import layoutImg from '../../assets/crk_layout/crk_layout.png'
 import { Background } from './Background'
-import { Grid, GRID_BOUNDS_AT_ORIGIN } from './Grid'
+import { Grid, GRID_BOUNDS_AT_ORIGIN, GRID_NUDGE_X, GRID_NUDGE_Y } from './Grid'
 
 extend({
   Container,
@@ -349,31 +349,33 @@ export const PixiCanvas = () => {
     >
       <img src={layoutImg} alt="layout" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, pointerEvents: 'none' }} />
       <div style={{ position: 'relative', zIndex: 1 }}>
-      <Application
-        resizeTo={window}
-        backgroundAlpha={0}
-        resolution={window.devicePixelRatio || 1}
-        autoDensity
-        antialias={false}
-        preference="webgl"
-        powerPreference="high-performance"
-      >
-        {/* Removed internal pixiSprite so DOM image shows through the transparent canvas */}
-        <pixiContainer
-          ref={setContainer}
-          eventMode="static"
-          cursor={isDragging ? 'grabbing' : 'grab'}
-          onPointerDown={startPan}
-          onPointerMove={updatePan}
-          onPointerUp={stopPan}
-          onPointerUpOutside={stopPan}
-          onPointerCancel={stopPan}
-          onPointerLeave={stopPan}
+        <Application
+          resizeTo={window}
+          backgroundAlpha={0}
+          resolution={window.devicePixelRatio || 1}
+          autoDensity
+          antialias={false}
+          preference="webgl"
+          powerPreference="high-performance"
         >
-          <Background width={WORLD_WIDTH} height={WORLD_HEIGHT} />
-          <Grid offsetX={GRID_OFFSET_X} offsetY={GRID_OFFSET_Y} />
-        </pixiContainer>
-      </Application>
+          {/* Removed internal pixiSprite so DOM image shows through the transparent canvas */}
+          <pixiContainer
+            ref={setContainer}
+            eventMode="static"
+            cursor={isDragging ? 'grabbing' : 'grab'}
+            onPointerDown={startPan}
+            onPointerMove={updatePan}
+            onPointerUp={stopPan}
+            onPointerUpOutside={stopPan}
+            onPointerCancel={stopPan}
+            onPointerLeave={stopPan}
+          >
+            <Background width={WORLD_WIDTH} height={WORLD_HEIGHT} />
+            <Grid offsetX={GRID_OFFSET_X + GRID_NUDGE_X}
+              offsetY={GRID_OFFSET_Y + GRID_NUDGE_Y}
+            />
+          </pixiContainer>
+        </Application>
       </div>
     </div>
   )
