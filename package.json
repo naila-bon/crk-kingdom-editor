@@ -7,7 +7,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:dev": "sh script/start",
+    "docker:reset": "docker compose down -v && rm -f .env && cp .env.example .env",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:import": "node scripts/import-json-to-postgres.js"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.35.0",
@@ -15,7 +22,10 @@
     "@emotion/styled": "^11.14.1",
     "@pixi/react": "^8.0.5",
     "framer-motion": "^12.38.0",
+    "lucide": "^1.3.0",
+    "lucide-react": "^1.17.0",
     "next-themes": "^0.4.6",
+    "pg": "^8.16.3",
     "pixi.js": "^8.18.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

@@ -1,13 +1,17 @@
 import { Application, extend } from '@pixi/react'
 import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react'
-import { Container, Graphics, type FederatedPointerEvent } from 'pixi.js'
-import { Background, BG_COLOR } from './Background'
+import { Container, Graphics, type FederatedPointerEvent, Sprite as PixiSprite } from 'pixi.js'
+import layoutImg from '../../assets/crk_layout/crk_layout.png'
+import { Background } from './Background'
 import { Grid, GRID_BOUNDS_AT_ORIGIN } from './Grid'
 
 extend({
   Container,
   Graphics,
+  Sprite: PixiSprite,
 })
+
+// bgTexture removed: we now use the DOM image behind the canvas
 
 const WORLD_WIDTH = 4000
 const WORLD_HEIGHT = 4000
@@ -106,6 +110,7 @@ export const PixiCanvas = () => {
     width: typeof window !== 'undefined' ? window.innerWidth : 0,
     height: typeof window !== 'undefined' ? window.innerHeight : 0,
   })
+  // no local viewportSize state needed; use viewportRef.current
   const dragRef = useRef({ active: false, x: 0, y: 0 })
   const containerRef = useRef<Container | null>(null)
   const didInitCameraRef = useRef(false)
@@ -340,17 +345,20 @@ export const PixiCanvas = () => {
   return (
     <div
       onWheel={handleWheel}
-      style={{ width: '100vw', height: '100vh', overflow: 'hidden', touchAction: 'none' }}
+      style={{ width: '100vw', height: '100vh', overflow: 'hidden', touchAction: 'none', position: 'relative' }}
     >
+      <img src={layoutImg} alt="layout" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', zIndex: 1 }}>
       <Application
         resizeTo={window}
-        backgroundColor={BG_COLOR}
+        backgroundAlpha={0}
         resolution={window.devicePixelRatio || 1}
         autoDensity
         antialias={false}
         preference="webgl"
         powerPreference="high-performance"
       >
+        {/* Removed internal pixiSprite so DOM image shows through the transparent canvas */}
         <pixiContainer
           ref={setContainer}
           eventMode="static"
@@ -366,6 +374,7 @@ export const PixiCanvas = () => {
           <Grid offsetX={GRID_OFFSET_X} offsetY={GRID_OFFSET_Y} />
         </pixiContainer>
       </Application>
+      </div>
     </div>
   )
 }
