@@ -23,10 +23,6 @@ const ZOOM_SENSITIVITY = 0.0012
 const ZOOM_SMOOTHING = 0.2
 const ZOOM_EPSILON = 0.001
 
-// Point d'ancrage de la grille EN PIXELS DANS L'IMAGE SOURCE (pas à l'écran).
-// À calibrer une seule fois (ex: ouvrir le PNG, repérer le pixel qui doit
-// correspondre à l'origine (0,0) de la grille iso) — ensuite ça ne bouge plus
-// jamais, quel que soit l'écran.
 const IMG_ANCHOR_PX = { x: 2160, y: 695 }
 
 
@@ -107,9 +103,6 @@ const clampCameraToWorld = (
   return { x: boundedX, y: boundedY }
 }
 
-// Reproduit la logique de `background-size: cover` en JS, à partir des
-// vraies dimensions du PNG, pour placer le sprite ET calculer l'ancrage
-// world-space de la grille au même endroit à chaque resize.
 const getCoverLayout = (viewport: Viewport, tex: Texture): CoverLayout => {
   const scale = Math.max(viewport.width / tex.width, viewport.height / tex.height)
   const dispW = tex.width * scale
