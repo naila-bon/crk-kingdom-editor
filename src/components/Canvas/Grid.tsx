@@ -7,6 +7,8 @@ import {
 } from '../../utils/gridUtils'
 
 const GRID_COLOR = '#ffffff'
+const GRID_LINE_ALPHA = 0.35
+const GRID_BASE_SCALE = 4.4
 
 const DEFAULT_MAP_MASK: number[][] = [
   [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0],
@@ -27,80 +29,54 @@ const DEFAULT_MAP_MASK: number[][] = [
   [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 ]
 
-const TILE_W = TILE_WIDTH
-const TILE_H = TILE_HEIGHT
-const MATRIX = DEFAULT_MAP_MASK
-const MATRIX_ROWS = MATRIX.length
-const MATRIX_COLS = MATRIX[0].length
+const MATRIX_ROWS = DEFAULT_MAP_MASK.length
+const MATRIX_COLS = DEFAULT_MAP_MASK[0].length
 const MATRIX_COL_OFFSET = Math.floor(MATRIX_COLS / 2)
 const MATRIX_ROW_OFFSET = Math.floor(MATRIX_ROWS / 2)
-
-type Bounds = {
-  minX: number
-  maxX: number
-  minY: number
-  maxY: number
-}
-
-const computeGridBoundsAtOrigin = (): Bounds => {
-  let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  for (let r = 0; r < MATRIX_ROWS; r++) {
-    for (let c = 0; c < MATRIX_COLS; c++) {
-      if (!MATRIX[r][c]) continue
-
-      const col = c - MATRIX_COL_OFFSET
-      const row = r - MATRIX_ROW_OFFSET
-      const { x, y } = isoToScreen(col, row)
-
-      minX = Math.min(minX, x - TILE_W / 2)
-      maxX = Math.max(maxX, x + TILE_W / 2)
-      minY = Math.min(minY, y - TILE_H / 2)
-      maxY = Math.max(maxY, y + TILE_H / 2)
-    }
-  }
-
-  return { minX, maxX, minY, maxY }
-}
-
-// Used by camera logic to clamp pan/zoom against the real tile envelope.
-export const GRID_BOUNDS_AT_ORIGIN = computeGridBoundsAtOrigin()
 
 type GridProps = {
   offsetX: number
   offsetY: number
+  coverScale: number
 }
 
-export const Grid: FC<GridProps> = ({ offsetX, offsetY }) => {
+export const Grid: FC<GridProps> = ({ offsetX, offsetY, coverScale }) => {
+  const effectiveScale = GRID_BASE_SCALE * coverScale
+  const tileWidth = TILE_WIDTH * effectiveScale
+  const tileHeight = TILE_HEIGHT * effectiveScale
+
+  const drawTile = useCallback(
+    (graphics: Graphics, x: number, y: number) => {
+      graphics
+        .moveTo(x, y - tileHeight / 2)
+        .lineTo(x + tileWidth / 2, y)
+        .lineTo(x, y + tileHeight / 2)
+        .lineTo(x - tileWidth / 2, y)
+        .lineTo(x, y - tileHeight / 2)
+    },
+    [tileHeight, tileWidth],
+  )
 
   const draw = useCallback(
-    (g: Graphics) => {
-      g.clear()
-      g.setStrokeStyle({ width: 1, color: GRID_COLOR, alpha: 0.35 })
+    (graphics: Graphics) => {
+      graphics.clear()
+      graphics.setStrokeStyle({ width: 1, color: GRID_COLOR, alpha: GRID_LINE_ALPHA })
 
-      for (let r = 0; r < MATRIX_ROWS; r++) {
-        for (let c = 0; c < MATRIX_COLS; c++) {
-          if (!MATRIX[r][c]) continue
+      for (let rowIndex = 0; rowIndex < MATRIX_ROWS; rowIndex += 1) {
+        for (let colIndex = 0; colIndex < MATRIX_COLS; colIndex += 1) {
+          if (!DEFAULT_MAP_MASK[rowIndex][colIndex]) continue
 
-          const col = c - MATRIX_COL_OFFSET
-          const row = r - MATRIX_ROW_OFFSET
+          const col = colIndex - MATRIX_COL_OFFSET
+          const row = rowIndex - MATRIX_ROW_OFFSET
+          const { x, y } = isoToScreen(col, row, offsetX, offsetY, effectiveScale)
 
-          const { x, y } = isoToScreen(col, row, offsetX, offsetY)
-
-          g.moveTo(x, y - TILE_H / 2)
-            .lineTo(x + TILE_W / 2, y)
-            .lineTo(x, y + TILE_H / 2)
-            .lineTo(x - TILE_W / 2, y)
-            .lineTo(x, y - TILE_H / 2)
+          drawTile(graphics, x, y)
         }
       }
 
-      g.stroke()
+      graphics.stroke()
     },
-    [offsetX, offsetY],
+    [drawTile, effectiveScale, offsetX, offsetY],
   )
 
   return <pixiGraphics draw={draw} />
