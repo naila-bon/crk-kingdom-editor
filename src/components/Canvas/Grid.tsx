@@ -14,7 +14,6 @@ const GRID_BASE_SCALE = 4.4
 const SMALL_GRID_LINE_WIDTH = 0.5
 const SMALL_GRID_LINE_ALPHA = 0.18
 
-// Nombre de losanges medium par côté d'un losange large (cellule de la matrice).
 const MEDIUM_PER_LARGE = 4
 const SMALL_PER_MEDIUM = 2
 
@@ -48,8 +47,33 @@ const centeredOffsets = (n: number) =>
 const MEDIUM_OFFSETS = centeredOffsets(MEDIUM_PER_LARGE)
 const SMALL_OFFSETS = centeredOffsets(SMALL_PER_MEDIUM)
 
-const SMALL_PER_LARGE = MEDIUM_PER_LARGE * SMALL_PER_MEDIUM
+// Exporté pour que PixiCanvas puisse aussi s'en servir (screenToGridCoords).
+export const SMALL_PER_LARGE = MEDIUM_PER_LARGE * SMALL_PER_MEDIUM
 
+export const isSmallCellInMask = (smallCol: number, smallRow: number): boolean => {
+  const largeCol = Math.floor(smallCol / SMALL_PER_LARGE + 0.5)
+  const largeRow = Math.floor(smallRow / SMALL_PER_LARGE + 0.5)
+
+  const colIndex = largeCol + MATRIX_COL_OFFSET
+  const rowIndex = largeRow + MATRIX_ROW_OFFSET
+
+  if (rowIndex < 0 || rowIndex >= MATRIX_ROWS || colIndex < 0 || colIndex >= MATRIX_COLS) {
+    return false
+  }
+
+  return DEFAULT_MAP_MASK[rowIndex][colIndex] === 1
+}
+
+export const getSmallTileGeometry = (coverScale: number) => {
+  const effectiveScale = GRID_BASE_SCALE * coverScale
+  const smallScale = effectiveScale / SMALL_PER_LARGE
+  return {
+    smallScale,
+    smallTileWidth: TILE_WIDTH * smallScale,
+    smallTileHeight: TILE_HEIGHT * smallScale,
+  }
+}
+  
 type GridProps = {
   offsetX: number
   offsetY: number

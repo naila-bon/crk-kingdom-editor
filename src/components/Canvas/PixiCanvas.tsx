@@ -12,17 +12,17 @@ import {
   type FederatedPointerEvent,
 } from 'pixi.js'
 import layoutImg from '../../assets/crk_layout/crk_layout.png'
-import { Grid } from './Grid'
+import { Grid, getSmallTileGeometry, isSmallCellInMask } from './Grid'
 import { DecorationsLayer } from './DecorationsLayer'
 import type { PlacedDecoration } from '../../types/decorations'
-import { TILE_HEIGHT, TILE_WIDTH, GRID_BASE_SCALE, SMALL_PER_LARGE } from '@/utils/gridUtils'
+import { TILE_HEIGHT, TILE_WIDTH } from '@/utils/gridUtils'
+import { HoverHighlight } from './HoverHighlight'
 
 extend({
   Container,
   Graphics,
   Sprite: PixiSprite,
 })
-
 
 const MIN_ZOOM = 1
 const MAX_ZOOM = 3
@@ -126,12 +126,12 @@ const getCoverLayout = (viewport: Viewport, tex: Texture): CoverLayout => {
     anchorWorldY: topLeftY + IMG_ANCHOR_PX.y * scale,
   }
 }
+
 type PixiCanvasProps = {
   selectedDecoration: { name: string; size: string } | null
 }
 
 export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
-  console.log('PixiCanvas render', selectedDecoration?.name)
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -139,7 +139,6 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
   const zoomAnimationFrameRef = useRef<number | null>(null)
   const viewportRef = useRef<Viewport>(getViewportSize())
   const dragRef = useRef({ active: false, x: 0, y: 0 })
-  // Position de départ du pointerdown, pour distinguer un clic d'un drag.
   const pointerDownRef = useRef({ x: 0, y: 0 })
   const containerRef = useRef<Container | null>(null)
   const didInitCameraRef = useRef(false)
@@ -147,6 +146,7 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
   const [viewportSize, setViewportSize] = useState<Viewport>(viewportRef.current)
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
   const [placedDecorations, setPlacedDecorations] = useState<PlacedDecoration[]>([])
+  const [hoverCell, setHoverCell] = useState<{ col: number; row: number } | null>(null)
 
   useEffect(() => {
     Assets.load(layoutImg).then((tex: Texture) => setBgTexture(tex))
@@ -314,14 +314,15 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
 
   const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
 
-  const effectiveScale = coverLayout ? GRID_BASE_SCALE * coverLayout.scale : 0
-  const smallScale = effectiveScale / SMALL_PER_LARGE
-  const smallTileWidth = TILE_WIDTH * smallScale
+  const { smallScale, smallTileWidth, smallTileHeight } = coverLayout
+    ? getSmallTileGeometry(coverLayout.scale)
+    : { smallScale: 0, smallTileWidth: 0, smallTileHeight: 0 }
 
-  const parseSizeToSmallTiles = (size: string): number => {
-  const parsed = parseFloat(size)
+  const parseSizeToSmallTiles = useCallback((size: string): number => {
+    const parsed = parseFloat(size)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 4
-  }
+  }, [])
+
   const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
     if (!coverLayout || !selectedDecoration) return
 
@@ -330,9 +331,14 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
       globalY,
       coverLayout.anchorWorldX,
       coverLayout.anchorWorldY,
-      smallScale, // placement directement en coordonnées "small"
+      smallScale,
     )
     if (!coords) return
+
+    // Refuse le placement si le clic tombe hors de la zone active de la carte.
+    if (!isSmallCellInMask(coords.col, coords.row)) {
+      return
+    }
 
     setPlacedDecorations((prev) => [
       ...prev,
@@ -344,6 +350,28 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
         widthInSmallTiles: parseSizeToSmallTiles(selectedDecoration.size),
       },
     ])
+  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
+
+  const updateHover = useCallback((globalX: number, globalY: number) => {
+    if (!coverLayout || !selectedDecoration) {
+      setHoverCell(null)
+      return
+    }
+
+    const coords = screenToGridCoords(
+      globalX,
+      globalY,
+      coverLayout.anchorWorldX,
+      coverLayout.anchorWorldY,
+      smallScale,
+    )
+
+    if (!coords || !isSmallCellInMask(coords.col, coords.row)) {
+      setHoverCell(null)
+      return
+    }
+
+    setHoverCell(coords)
   }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale])
 
   const startPan = useCallback((event: FederatedPointerEvent) => {
@@ -364,21 +392,20 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
     dragRef.current.active = false
     setIsDragging(false)
 
-    console.log('stopPan appelé, wasDragging=', wasDragging)
-
     if (!wasDragging) return
 
     const dx = event.global.x - pointerDownRef.current.x
     const dy = event.global.y - pointerDownRef.current.y
     const movedDistance = Math.hypot(dx, dy)
 
-    console.log('movedDistance=', movedDistance)
-
     if (movedDistance <= CLICK_MOVE_THRESHOLD) {
       handlePlaceClick(event.global.x, event.global.y)
     }
   }, [handlePlaceClick])
+
   const updatePan = useCallback((event: FederatedPointerEvent) => {
+    updateHover(event.global.x, event.global.y)
+
     if (!dragRef.current.active) return
 
     const deltaX = event.global.x - dragRef.current.x
@@ -400,7 +427,12 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
     cameraRef.current.y = bounded.y
 
     applyCamera()
-  }, [applyCamera])
+  }, [applyCamera, updateHover])
+
+  const handlePointerLeave = useCallback((event: FederatedPointerEvent) => {
+    stopPan(event)
+    setHoverCell(null)
+  }, [stopPan])
 
   useEffect(() => {
     centerWorld()
@@ -472,7 +504,7 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
           onPointerUp={stopPan}
           onPointerUpOutside={stopPan}
           onPointerCancel={stopPan}
-          onPointerLeave={stopPan}
+          onPointerLeave={handlePointerLeave}
         >
           {bgTexture && coverLayout && (
             <pixiSprite
@@ -483,18 +515,29 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
               scale={coverLayout.scale}
             />
           )}
-           {coverLayout && (
-    <>
-      <Grid offsetX={coverLayout.anchorWorldX} offsetY={coverLayout.anchorWorldY} coverScale={coverLayout.scale} />
-      <DecorationsLayer
-        placed={placedDecorations}
-        offsetX={coverLayout.anchorWorldX}
-        offsetY={coverLayout.anchorWorldY}
-        smallScale={smallScale}
-        smallTileWidth={smallTileWidth}
-      />
-    </>
-  )}
+          {coverLayout && (
+            <>
+              <Grid offsetX={coverLayout.anchorWorldX} offsetY={coverLayout.anchorWorldY} coverScale={coverLayout.scale} />
+              <DecorationsLayer
+                placed={placedDecorations}
+                offsetX={coverLayout.anchorWorldX}
+                offsetY={coverLayout.anchorWorldY}
+                smallScale={smallScale}
+                smallTileWidth={smallTileWidth}
+              />
+            </>
+          )}
+          {coverLayout && selectedDecoration && (
+            <HoverHighlight
+              hoverCell={hoverCell}
+              sizeInSmallTiles={parseSizeToSmallTiles(selectedDecoration.size)}
+              offsetX={coverLayout.anchorWorldX}
+              offsetY={coverLayout.anchorWorldY}
+              smallScale={smallScale}
+              smallTileWidth={smallTileWidth}
+              smallTileHeight={smallTileHeight}
+            />
+          )}
         </pixiContainer>
       </Application>
     </div>
