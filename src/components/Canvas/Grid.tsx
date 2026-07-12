@@ -1,3 +1,4 @@
+//grid.tsx
 import { Graphics } from 'pixi.js'
 import { useCallback, type FC } from 'react'
 import {

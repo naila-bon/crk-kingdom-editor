@@ -1,3 +1,4 @@
+//pixiCanvas.tsx
 import { Application, extend } from '@pixi/react'
 import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react'
 import {
@@ -5,11 +6,16 @@ import {
   Container,
   Graphics,
   Sprite as PixiSprite,
+  Point,
+  Rectangle,
   Texture,
   type FederatedPointerEvent,
 } from 'pixi.js'
 import layoutImg from '../../assets/crk_layout/crk_layout.png'
 import { Grid } from './Grid'
+import { DecorationsLayer } from './DecorationsLayer'
+import type { PlacedDecoration } from '../../types/decorations'
+import { TILE_HEIGHT, TILE_WIDTH, GRID_BASE_SCALE, SMALL_PER_LARGE } from '@/utils/gridUtils'
 
 extend({
   Container,
@@ -17,14 +23,16 @@ extend({
   Sprite: PixiSprite,
 })
 
+
 const MIN_ZOOM = 1
 const MAX_ZOOM = 3
 const ZOOM_SENSITIVITY = 0.0012
 const ZOOM_SMOOTHING = 0.2
 const ZOOM_EPSILON = 0.001
 
-const IMG_ANCHOR_PX = { x: 2160, y: 695 }
+const CLICK_MOVE_THRESHOLD = 5
 
+const IMG_ANCHOR_PX = { x: 2160, y: 695 }
 
 const clamp = (value: number, min: number, max: number): number => {
   return Math.min(max, Math.max(min, value))
@@ -118,8 +126,12 @@ const getCoverLayout = (viewport: Viewport, tex: Texture): CoverLayout => {
     anchorWorldY: topLeftY + IMG_ANCHOR_PX.y * scale,
   }
 }
+type PixiCanvasProps = {
+  selectedDecoration: { name: string; size: string } | null
+}
 
-export const PixiCanvas = () => {
+export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
+  console.log('PixiCanvas render', selectedDecoration?.name)
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -127,15 +139,38 @@ export const PixiCanvas = () => {
   const zoomAnimationFrameRef = useRef<number | null>(null)
   const viewportRef = useRef<Viewport>(getViewportSize())
   const dragRef = useRef({ active: false, x: 0, y: 0 })
+  // Position de départ du pointerdown, pour distinguer un clic d'un drag.
+  const pointerDownRef = useRef({ x: 0, y: 0 })
   const containerRef = useRef<Container | null>(null)
   const didInitCameraRef = useRef(false)
   const [isDragging, setIsDragging] = useState(false)
   const [viewportSize, setViewportSize] = useState<Viewport>(viewportRef.current)
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
+  const [placedDecorations, setPlacedDecorations] = useState<PlacedDecoration[]>([])
 
   useEffect(() => {
     Assets.load(layoutImg).then((tex: Texture) => setBgTexture(tex))
   }, [])
+
+  const screenToGridCoords = useCallback(
+    (globalX: number, globalY: number, offsetX: number, offsetY: number, scale: number) => {
+      if (!containerRef.current) return null
+
+      // toLocal inverse la transform du container (position + scale de la caméra)
+      const local = containerRef.current.toLocal(new Point(globalX, globalY))
+
+      const dx = local.x - offsetX
+      const dy = local.y - offsetY
+      const a = (TILE_WIDTH * scale) / 2
+      const b = (TILE_HEIGHT * scale) / 2
+
+      const col = (dx / a + dy / b) / 2
+      const row = (dy / b - dx / a) / 2
+
+      return { col: Math.round(col), row: Math.round(row) }
+    },
+    [],
+  )
 
   const applyCamera = useCallback(() => {
     if (containerRef.current) {
@@ -245,6 +280,7 @@ export const PixiCanvas = () => {
     containerRef.current = node
 
     if (node) {
+      node.hitArea = new Rectangle(0, 0, viewportRef.current.width, viewportRef.current.height)
       centerWorld()
     }
   }, [centerWorld])
@@ -276,6 +312,40 @@ export const PixiCanvas = () => {
     scheduleZoomAnimation()
   }, [scheduleZoomAnimation])
 
+  const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
+
+  const effectiveScale = coverLayout ? GRID_BASE_SCALE * coverLayout.scale : 0
+  const smallScale = effectiveScale / SMALL_PER_LARGE
+  const smallTileWidth = TILE_WIDTH * smallScale
+
+  const parseSizeToSmallTiles = (size: string): number => {
+  const parsed = parseFloat(size)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 4
+  }
+  const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
+    if (!coverLayout || !selectedDecoration) return
+
+    const coords = screenToGridCoords(
+      globalX,
+      globalY,
+      coverLayout.anchorWorldX,
+      coverLayout.anchorWorldY,
+      smallScale, // placement directement en coordonnées "small"
+    )
+    if (!coords) return
+
+    setPlacedDecorations((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: selectedDecoration.name,
+        col: coords.col,
+        row: coords.row,
+        widthInSmallTiles: parseSizeToSmallTiles(selectedDecoration.size),
+      },
+    ])
+  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale])
+
   const startPan = useCallback((event: FederatedPointerEvent) => {
     zoomAnchorRef.current.active = false
     stopZoomAnimation()
@@ -284,14 +354,30 @@ export const PixiCanvas = () => {
     dragRef.current.active = true
     dragRef.current.x = event.global.x
     dragRef.current.y = event.global.y
+    pointerDownRef.current.x = event.global.x
+    pointerDownRef.current.y = event.global.y
     setIsDragging(true)
   }, [stopZoomAnimation])
 
-  const stopPan = useCallback(() => {
+  const stopPan = useCallback((event: FederatedPointerEvent) => {
+    const wasDragging = dragRef.current.active
     dragRef.current.active = false
     setIsDragging(false)
-  }, [])
 
+    console.log('stopPan appelé, wasDragging=', wasDragging)
+
+    if (!wasDragging) return
+
+    const dx = event.global.x - pointerDownRef.current.x
+    const dy = event.global.y - pointerDownRef.current.y
+    const movedDistance = Math.hypot(dx, dy)
+
+    console.log('movedDistance=', movedDistance)
+
+    if (movedDistance <= CLICK_MOVE_THRESHOLD) {
+      handlePlaceClick(event.global.x, event.global.y)
+    }
+  }, [handlePlaceClick])
   const updatePan = useCallback((event: FederatedPointerEvent) => {
     if (!dragRef.current.active) return
 
@@ -329,6 +415,9 @@ export const PixiCanvas = () => {
       viewportRef.current.height = window.innerHeight
       setViewportSize({ width: window.innerWidth, height: window.innerHeight })
 
+      if (containerRef.current) {
+        containerRef.current.hitArea = new Rectangle(0, 0, window.innerWidth, window.innerHeight)
+      }
       const zoomLimits = getZoomLimits()
       zoomRef.current = clamp(zoomRef.current, zoomLimits.minZoom, zoomLimits.maxZoom)
       zoomTargetRef.current = zoomRef.current
@@ -359,8 +448,6 @@ export const PixiCanvas = () => {
       window.removeEventListener('resize', onResize)
     }
   }, [applyCamera, centerWorld, stopZoomAnimation])
-
-  const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
 
   return (
     <div
@@ -396,9 +483,18 @@ export const PixiCanvas = () => {
               scale={coverLayout.scale}
             />
           )}
-          {coverLayout && (
-            <Grid offsetX={coverLayout.anchorWorldX} offsetY={coverLayout.anchorWorldY} coverScale={coverLayout.scale} />
-          )}
+           {coverLayout && (
+    <>
+      <Grid offsetX={coverLayout.anchorWorldX} offsetY={coverLayout.anchorWorldY} coverScale={coverLayout.scale} />
+      <DecorationsLayer
+        placed={placedDecorations}
+        offsetX={coverLayout.anchorWorldX}
+        offsetY={coverLayout.anchorWorldY}
+        smallScale={smallScale}
+        smallTileWidth={smallTileWidth}
+      />
+    </>
+  )}
         </pixiContainer>
       </Application>
     </div>

@@ -1,6 +1,11 @@
 export const TILE_WIDTH = 64
 export const TILE_HEIGHT = 32
 
+export const GRID_BASE_SCALE = 4.4
+export const MEDIUM_PER_LARGE = 4
+export const SMALL_PER_MEDIUM = 2
+export const SMALL_PER_LARGE = MEDIUM_PER_LARGE * SMALL_PER_MEDIUM
+
 export const isoToScreen = (
   col: number,
   row: number,
