@@ -12,10 +12,10 @@ import {
   type FederatedPointerEvent,
 } from 'pixi.js'
 import layoutImg from '../../assets/crk_layout/crk_layout.png'
-import { Grid, getSmallTileGeometry, isSmallCellInMask } from './Grid'
+import { Grid, isFootprintInMask } from './Grid'
 import { DecorationsLayer } from './DecorationsLayer'
 import type { PlacedDecoration } from '../../types/decorations'
-import { TILE_HEIGHT, TILE_WIDTH } from '@/utils/gridUtils'
+import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, TINY_PER_SMALL } from '@/utils/gridUtils'
 import { HoverHighlight } from './HoverHighlight'
 
 extend({
@@ -318,62 +318,66 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
     ? getSmallTileGeometry(coverLayout.scale)
     : { smallScale: 0, smallTileWidth: 0, smallTileHeight: 0 }
 
-  const parseSizeToSmallTiles = useCallback((size: string): number => {
-    const parsed = parseFloat(size)
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 4
-  }, [])
+const parseSizeToSmallTiles = useCallback((size: string): number => {
+  const match = size.match(/(\d+(?:\.\d+)?)/)
+  const parsed = match ? parseFloat(match[1]) : NaN
+  const sizeInTiny = Number.isFinite(parsed) && parsed > 0 ? parsed : 4
 
-  const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
-    if (!coverLayout || !selectedDecoration) return
+  return sizeInTiny / TINY_PER_SMALL
+}, [])
 
-    const coords = screenToGridCoords(
-      globalX,
-      globalY,
-      coverLayout.anchorWorldX,
-      coverLayout.anchorWorldY,
-      smallScale,
-    )
-    if (!coords) return
+const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
+  if (!coverLayout || !selectedDecoration) return
 
-    // Refuse le placement si le clic tombe hors de la zone active de la carte.
-    if (!isSmallCellInMask(coords.col, coords.row)) {
-      return
-    }
+  const coords = screenToGridCoords(
+    globalX,
+    globalY,
+    coverLayout.anchorWorldX,
+    coverLayout.anchorWorldY,
+    smallScale,
+  )
+  if (!coords) return
 
-    setPlacedDecorations((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        name: selectedDecoration.name,
-        col: coords.col,
-        row: coords.row,
-        widthInSmallTiles: parseSizeToSmallTiles(selectedDecoration.size),
-      },
-    ])
-  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
+  const sizeInSmallTiles = parseSizeToSmallTiles(selectedDecoration.size)
 
-  const updateHover = useCallback((globalX: number, globalY: number) => {
-    if (!coverLayout || !selectedDecoration) {
-      setHoverCell(null)
-      return
-    }
+  if (!isFootprintInMask(coords.col, coords.row, sizeInSmallTiles)) {
+    return
+  }
 
-    const coords = screenToGridCoords(
-      globalX,
-      globalY,
-      coverLayout.anchorWorldX,
-      coverLayout.anchorWorldY,
-      smallScale,
-    )
+  setPlacedDecorations((prev) => [
+    ...prev,
+    {
+      id: crypto.randomUUID(),
+      name: selectedDecoration.name,
+      col: coords.col,
+      row: coords.row,
+      widthInSmallTiles: sizeInSmallTiles,
+    },
+  ])
+}, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
+const updateHover = useCallback((globalX: number, globalY: number) => {
+  if (!coverLayout || !selectedDecoration) {
+    setHoverCell(null)
+    return
+  }
 
-    if (!coords || !isSmallCellInMask(coords.col, coords.row)) {
-      setHoverCell(null)
-      return
-    }
+  const coords = screenToGridCoords(
+    globalX,
+    globalY,
+    coverLayout.anchorWorldX,
+    coverLayout.anchorWorldY,
+    smallScale,
+  )
 
-    setHoverCell(coords)
-  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale])
+  const sizeInSmallTiles = parseSizeToSmallTiles(selectedDecoration.size)
 
+  if (!coords || !isFootprintInMask(coords.col, coords.row, sizeInSmallTiles)) {
+    setHoverCell(null)
+    return
+  }
+
+  setHoverCell(coords)
+}, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
   const startPan = useCallback((event: FederatedPointerEvent) => {
     zoomAnchorRef.current.active = false
     stopZoomAnimation()
@@ -487,7 +491,7 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
       style={{ width: '100vw', height: '100vh', overflow: 'hidden', touchAction: 'none', position: 'relative' }}
     >
       <Application
-        resizeTo={window}
+        resizeTo={window}    
         backgroundAlpha={0}
         resolution={window.devicePixelRatio || 1}
         autoDensity
@@ -524,6 +528,7 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
                 offsetY={coverLayout.anchorWorldY}
                 smallScale={smallScale}
                 smallTileWidth={smallTileWidth}
+                smallTileHeight={smallTileHeight} 
               />
             </>
           )}

@@ -2,14 +2,14 @@ import { Graphics } from 'pixi.js'
 import { useCallback, type FC } from 'react'
 import { isoToScreen } from '../../utils/gridUtils'
 
-const HIGHLIGHT_COLOR = '#a855f7' // violet
+const HIGHLIGHT_COLOR = '#a855f7'
 const HIGHLIGHT_ALPHA = 0.35
 const HIGHLIGHT_LINE_COLOR = '#c084fc'
 const HIGHLIGHT_LINE_ALPHA = 0.7
 
 type HoverHighlightProps = {
   hoverCell: { col: number; row: number } | null
-  sizeInSmallTiles: number // ex: 4 pour une déco 4x4
+  sizeInSmallTiles: number
   offsetX: number
   offsetY: number
   smallScale: number
@@ -17,7 +17,6 @@ type HoverHighlightProps = {
   smallTileHeight: number
 }
 
-// Génère les décalages centrés (identique à centeredOffsets dans Grid.tsx)
 const centeredOffsets = (n: number) =>
   Array.from({ length: n }, (_, i) => i - (n - 1) / 2)
 
