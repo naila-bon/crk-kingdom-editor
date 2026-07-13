@@ -1,3 +1,4 @@
+//pixiCanvas.tsx
 import { Application, extend } from '@pixi/react'
 import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react'
 import {
@@ -5,11 +6,17 @@ import {
   Container,
   Graphics,
   Sprite as PixiSprite,
+  Point,
+  Rectangle,
   Texture,
   type FederatedPointerEvent,
 } from 'pixi.js'
 import layoutImg from '../../assets/crk_layout/crk_layout.png'
-import { Grid } from './Grid'
+import { Grid, isFootprintInMask } from './Grid'
+import { DecorationsLayer } from './DecorationsLayer'
+import type { PlacedDecoration } from '../../types/decorations'
+import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, TINY_PER_SMALL } from '@/utils/gridUtils'
+import { HoverHighlight } from './HoverHighlight'
 
 extend({
   Container,
@@ -23,8 +30,9 @@ const ZOOM_SENSITIVITY = 0.0012
 const ZOOM_SMOOTHING = 0.2
 const ZOOM_EPSILON = 0.001
 
-const IMG_ANCHOR_PX = { x: 2160, y: 695 }
+const CLICK_MOVE_THRESHOLD = 5
 
+const IMG_ANCHOR_PX = { x: 2160, y: 695 }
 
 const clamp = (value: number, min: number, max: number): number => {
   return Math.min(max, Math.max(min, value))
@@ -119,7 +127,12 @@ const getCoverLayout = (viewport: Viewport, tex: Texture): CoverLayout => {
   }
 }
 
-export const PixiCanvas = () => {
+type PixiCanvasProps = {
+  selectedDecoration: { name: string; size: string } | null
+  onExitPlacementMode?: () => void
+}
+
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -127,15 +140,40 @@ export const PixiCanvas = () => {
   const zoomAnimationFrameRef = useRef<number | null>(null)
   const viewportRef = useRef<Viewport>(getViewportSize())
   const dragRef = useRef({ active: false, x: 0, y: 0 })
+  const pointerDownRef = useRef({ x: 0, y: 0 })
   const containerRef = useRef<Container | null>(null)
   const didInitCameraRef = useRef(false)
   const [isDragging, setIsDragging] = useState(false)
   const [viewportSize, setViewportSize] = useState<Viewport>(viewportRef.current)
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
+  const [placedDecorations, setPlacedDecorations] = useState<PlacedDecoration[]>([])
+  const [hoverCell, setHoverCell] = useState<{ col: number; row: number } | null>(null)
+  const [selectedPlacedId, setSelectedPlacedId] = useState<string | null>(null)
+  const draggingPlacedRef = useRef<{ id: string; moved: boolean } | null>(null)
 
   useEffect(() => {
     Assets.load(layoutImg).then((tex: Texture) => setBgTexture(tex))
   }, [])
+
+  const screenToGridCoords = useCallback(
+    (globalX: number, globalY: number, offsetX: number, offsetY: number, scale: number) => {
+      if (!containerRef.current) return null
+
+      // toLocal inverse la transform du container (position + scale de la caméra)
+      const local = containerRef.current.toLocal(new Point(globalX, globalY))
+
+      const dx = local.x - offsetX
+      const dy = local.y - offsetY
+      const a = (TILE_WIDTH * scale) / 2
+      const b = (TILE_HEIGHT * scale) / 2
+
+      const col = (dx / a + dy / b) / 2
+      const row = (dy / b - dx / a) / 2
+
+      return { col: Math.round(col), row: Math.round(row) }
+    },
+    [],
+  )
 
   const applyCamera = useCallback(() => {
     if (containerRef.current) {
@@ -245,6 +283,7 @@ export const PixiCanvas = () => {
     containerRef.current = node
 
     if (node) {
+      node.hitArea = new Rectangle(0, 0, viewportRef.current.width, viewportRef.current.height)
       centerWorld()
     }
   }, [centerWorld])
@@ -276,6 +315,75 @@ export const PixiCanvas = () => {
     scheduleZoomAnimation()
   }, [scheduleZoomAnimation])
 
+  const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
+
+  const { smallScale, smallTileWidth, smallTileHeight } = coverLayout
+    ? getSmallTileGeometry(coverLayout.scale)
+    : { smallScale: 0, smallTileWidth: 0, smallTileHeight: 0 }
+
+  const parseSizeToSmallTiles = useCallback((size: string): number => {
+    const match = size.match(/(\d+(?:\.\d+)?)/)
+    const parsed = match ? parseFloat(match[1]) : NaN
+    const sizeInTiny = Number.isFinite(parsed) && parsed > 0 ? parsed : 4
+
+    return sizeInTiny / TINY_PER_SMALL
+  }, [])
+
+  const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
+
+    setSelectedPlacedId(null)
+    if (!coverLayout || !selectedDecoration) return
+
+    const coords = screenToGridCoords(
+      globalX,
+      globalY,
+      coverLayout.anchorWorldX,
+      coverLayout.anchorWorldY,
+      smallScale,
+    )
+    if (!coords) return
+
+    const sizeInSmallTiles = parseSizeToSmallTiles(selectedDecoration.size)
+
+    if (!isFootprintInMask(coords.col, coords.row, sizeInSmallTiles)) {
+      return
+    }
+
+    setPlacedDecorations((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: selectedDecoration.name,
+        col: coords.col,
+        row: coords.row,
+        widthInSmallTiles: sizeInSmallTiles,
+      },
+    ])
+  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
+
+  const updateHover = useCallback((globalX: number, globalY: number) => {
+    if (!coverLayout || !selectedDecoration) {
+      setHoverCell(null)
+      return
+    }
+
+    const coords = screenToGridCoords(
+      globalX,
+      globalY,
+      coverLayout.anchorWorldX,
+      coverLayout.anchorWorldY,
+      smallScale,
+    )
+
+    const sizeInSmallTiles = parseSizeToSmallTiles(selectedDecoration.size)
+
+    if (!coords || !isFootprintInMask(coords.col, coords.row, sizeInSmallTiles)) {
+      setHoverCell(null)
+      return
+    }
+
+    setHoverCell(coords)
+  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
   const startPan = useCallback((event: FederatedPointerEvent) => {
     zoomAnchorRef.current.active = false
     stopZoomAnimation()
@@ -284,15 +392,78 @@ export const PixiCanvas = () => {
     dragRef.current.active = true
     dragRef.current.x = event.global.x
     dragRef.current.y = event.global.y
+    pointerDownRef.current.x = event.global.x
+    pointerDownRef.current.y = event.global.y
     setIsDragging(true)
   }, [stopZoomAnimation])
 
-  const stopPan = useCallback(() => {
+  const stopPan = useCallback((event: FederatedPointerEvent) => {
+    // Fin du déplacement d'une décoration : on vérifie que la position
+    // finale est valide (dans le masque), sinon on annule le déplacement.
+    if (draggingPlacedRef.current) {
+      const { id } = draggingPlacedRef.current
+      draggingPlacedRef.current = null
+
+      setPlacedDecorations((prev) => {
+        const deco = prev.find((d) => d.id === id)
+        if (!deco) return prev
+
+        if (!isFootprintInMask(deco.col, deco.row, deco.widthInSmallTiles)) {
+          // Position invalide : on ne peut pas facilement "annuler" ici sans
+          // garder la position d'origine à part — solution simple : on
+          // retire la décoration si elle finit hors zone. Une alternative
+          // plus douce serait de mémoriser sa position de départ et de la
+          // restaurer ; dis-moi si tu préfères ce comportement.
+          return prev.filter((d) => d.id !== id)
+        }
+
+        return prev
+      })
+
+      return
+    }
+
+    const wasDragging = dragRef.current.active
     dragRef.current.active = false
     setIsDragging(false)
-  }, [])
 
+    if (!wasDragging) return
+
+    const dx = event.global.x - pointerDownRef.current.x
+    const dy = event.global.y - pointerDownRef.current.y
+    const movedDistance = Math.hypot(dx, dy)
+
+    if (movedDistance <= CLICK_MOVE_THRESHOLD) {
+      handlePlaceClick(event.global.x, event.global.y)
+    }
+  }, [handlePlaceClick])
   const updatePan = useCallback((event: FederatedPointerEvent) => {
+    updateHover(event.global.x, event.global.y)
+
+    // Si on est en train de faire glisser une décoration sélectionnée,
+    // on met à jour sa position en direct plutôt que de paner la caméra.
+    if (draggingPlacedRef.current && coverLayout) {
+      draggingPlacedRef.current.moved = true
+
+      const coords = screenToGridCoords(
+        event.global.x,
+        event.global.y,
+        coverLayout.anchorWorldX,
+        coverLayout.anchorWorldY,
+        smallScale,
+      )
+      if (!coords) return
+
+      setPlacedDecorations((prev) =>
+        prev.map((deco) =>
+          deco.id === draggingPlacedRef.current?.id
+            ? { ...deco, col: coords.col, row: coords.row }
+            : deco,
+        ),
+      )
+      return
+    }
+
     if (!dragRef.current.active) return
 
     const deltaX = event.global.x - dragRef.current.x
@@ -314,7 +485,25 @@ export const PixiCanvas = () => {
     cameraRef.current.y = bounded.y
 
     applyCamera()
-  }, [applyCamera])
+  }, [applyCamera, updateHover, coverLayout, screenToGridCoords, smallScale])
+  const handlePointerLeave = useCallback((event: FederatedPointerEvent) => {
+    stopPan(event)
+    setHoverCell(null)
+  }, [stopPan])
+
+  const handleSelectPlaced = useCallback((id: string) => {
+    setSelectedPlacedId(id)
+  }, [])
+
+  const handleDeletePlaced = useCallback((id: string) => {
+    setPlacedDecorations((prev) => prev.filter((d) => d.id !== id))
+    setSelectedPlacedId(null)
+  }, [])
+
+  const handleDragStartPlaced = useCallback((id: string) => {
+    dragRef.current.active = false
+    draggingPlacedRef.current = { id, moved: false }
+  }, [])
 
   useEffect(() => {
     centerWorld()
@@ -329,6 +518,9 @@ export const PixiCanvas = () => {
       viewportRef.current.height = window.innerHeight
       setViewportSize({ width: window.innerWidth, height: window.innerHeight })
 
+      if (containerRef.current) {
+        containerRef.current.hitArea = new Rectangle(0, 0, window.innerWidth, window.innerHeight)
+      }
       const zoomLimits = getZoomLimits()
       zoomRef.current = clamp(zoomRef.current, zoomLimits.minZoom, zoomLimits.maxZoom)
       zoomTargetRef.current = zoomRef.current
@@ -360,8 +552,24 @@ export const PixiCanvas = () => {
     }
   }, [applyCamera, centerWorld, stopZoomAnimation])
 
-  const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedPlacedId(null)
+        onExitPlacementMode?.()
+      }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPlacedId) {
+        setPlacedDecorations((prev) => prev.filter((d) => d.id !== selectedPlacedId))
+        setSelectedPlacedId(null)
+      }
+      if (event.key === 'Escape') {
+        setSelectedPlacedId(null)
+      }
+    }
 
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedPlacedId])
   return (
     <div
       onWheel={handleWheel}
@@ -385,7 +593,7 @@ export const PixiCanvas = () => {
           onPointerUp={stopPan}
           onPointerUpOutside={stopPan}
           onPointerCancel={stopPan}
-          onPointerLeave={stopPan}
+          onPointerLeave={handlePointerLeave}
         >
           {bgTexture && coverLayout && (
             <pixiSprite
@@ -397,7 +605,33 @@ export const PixiCanvas = () => {
             />
           )}
           {coverLayout && (
-            <Grid offsetX={coverLayout.anchorWorldX} offsetY={coverLayout.anchorWorldY} coverScale={coverLayout.scale} />
+            <>
+              <Grid offsetX={coverLayout.anchorWorldX} offsetY={coverLayout.anchorWorldY} coverScale={coverLayout.scale} />
+              <DecorationsLayer
+                placed={placedDecorations}
+                offsetX={coverLayout.anchorWorldX}
+                offsetY={coverLayout.anchorWorldY}
+                smallScale={smallScale}
+                smallTileWidth={smallTileWidth}
+                smallTileHeight={smallTileHeight}
+                selectedPlacedId={selectedPlacedId}
+                onSelectPlaced={handleSelectPlaced}
+                onDragStart={handleDragStartPlaced}
+                onDeletePlaced={handleDeletePlaced}
+                interactive={!selectedDecoration}
+              />
+            </>
+          )}
+          {coverLayout && selectedDecoration && (
+            <HoverHighlight
+              hoverCell={hoverCell}
+              sizeInSmallTiles={parseSizeToSmallTiles(selectedDecoration.size)}
+              offsetX={coverLayout.anchorWorldX}
+              offsetY={coverLayout.anchorWorldY}
+              smallScale={smallScale}
+              smallTileWidth={smallTileWidth}
+              smallTileHeight={smallTileHeight}
+            />
           )}
         </pixiContainer>
       </Application>

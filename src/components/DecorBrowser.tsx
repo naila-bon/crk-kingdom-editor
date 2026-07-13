@@ -1,3 +1,4 @@
+//decorBrowser.tsx
 import { useState } from 'react'
 
 import {
@@ -32,7 +33,17 @@ const categories = Array.from(new Set(items.map((item) => item.theme))).sort((le
   left.localeCompare(right),
 )
 
-export function DecorBrowser({ onClose }: { onClose?: () => void }) {
+type DecorBrowserProps = {
+  onClose?: () => void
+  // Nom de la décoration actuellement sélectionnée (pour l'affichage en
+  // surbrillance), contrôlé par le parent.
+  selectedDecorationName?: string | null
+  // Appelé quand l'utilisateur clique sur une décoration pour la sélectionner
+  // (prête à être posée sur la grille).
+  onSelectDecoration?: (decoration: Decoration) => void
+}
+
+export function DecorBrowser({ onClose, selectedDecorationName, onSelectDecoration }: DecorBrowserProps) {
   const [selectedCategory, setSelectedCategory] = useState('')
 
   const filteredDecorations = selectedCategory
@@ -129,44 +140,62 @@ export function DecorBrowser({ onClose }: { onClose?: () => void }) {
               </HStack>
 
               <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} maxH="80vh" overflowY="auto" pr={1} >
-                {filteredDecorations.map((decoration) => (
-                  <Box
-                    key={`${decoration.theme}-${decoration.name}`}
-                    rounded="2xl"
-                    border="1px solid"
-                    borderColor="whiteAlpha.200"
-                    bg="whiteAlpha.100"
-                    overflow="hidden"
-                    shadow="lg"
-                  >
-                    <Box aspectRatio={1} bg="blackAlpha.300">
-                      {decoration.imageUrl ? (
-                        <Image src={decoration.imageUrl} alt={decoration.name} objectFit="contain" w="full" h="full" />
-                      ) : null}
-                    </Box>
+                {filteredDecorations.map((decoration) => {
+                  const isSelected = decoration.name === selectedDecorationName
 
-                    <VStack align="stretch" gap={3} p={4}>
-                      <Box>
-                        <Heading size="md">{decoration.name}</Heading>
-                        <Text color="whiteAlpha.700" fontSize="sm">
-                          {decoration.theme}
-                        </Text>
+                  return (
+                    <Box
+                      key={`${decoration.theme}-${decoration.name}`}
+                      role="button"
+                      tabIndex={0}
+                      cursor="pointer"
+                      onClick={() => onSelectDecoration?.(decoration)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') onSelectDecoration?.(decoration)
+                      }}
+                      rounded="2xl"
+                      border="2px solid"
+                      borderColor={isSelected ? 'cyan.400' : 'whiteAlpha.200'}
+                      bg={isSelected ? 'cyan.900' : 'whiteAlpha.100'}
+                      overflow="hidden"
+                      shadow={isSelected ? 'dark-lg' : 'lg'}
+                      transition="border-color 0.15s, background 0.15s"
+                      _hover={{ borderColor: isSelected ? 'cyan.400' : 'whiteAlpha.400' }}
+                    >
+                      <Box aspectRatio={1} bg="blackAlpha.300" position="relative">
+                        {decoration.imageUrl ? (
+                          <Image src={decoration.imageUrl} alt={decoration.name} objectFit="contain" w="full" h="full" />
+                        ) : null}
+                        {isSelected ? (
+                          <Badge position="absolute" top={2} right={2} colorPalette="cyan">
+                            Selected
+                          </Badge>
+                        ) : null}
                       </Box>
 
-                      <HStack wrap="wrap" gap={2}>
-                        <Badge colorPalette="cyan">{decoration.size}</Badge>
-                        <Badge colorPalette="orange">{decoration.points} pts</Badge>
-                        {decoration.color ? <Badge colorPalette="purple">{decoration.color}</Badge> : null}
-                      </HStack>
+                      <VStack align="stretch" gap={3} p={4}>
+                        <Box>
+                          <Heading size="md">{decoration.name}</Heading>
+                          <Text color="whiteAlpha.700" fontSize="sm">
+                            {decoration.theme}
+                          </Text>
+                        </Box>
 
-                      {decoration.note ? (
-                        <Text fontSize="sm" color="whiteAlpha.700">
-                          {decoration.note}
-                        </Text>
-                      ) : null}
-                    </VStack>
-                  </Box>
-                ))}
+                        <HStack wrap="wrap" gap={2}>
+                          <Badge colorPalette="cyan">{decoration.size}</Badge>
+                          <Badge colorPalette="orange">{decoration.points} pts</Badge>
+                          {decoration.color ? <Badge colorPalette="purple">{decoration.color}</Badge> : null}
+                        </HStack>
+
+                        {decoration.note ? (
+                          <Text fontSize="sm" color="whiteAlpha.700">
+                            {decoration.note}
+                          </Text>
+                        ) : null}
+                      </VStack>
+                    </Box>
+                  )
+                })}
               </SimpleGrid>
             </>
           ) : null}
