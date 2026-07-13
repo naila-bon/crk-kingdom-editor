@@ -129,9 +129,10 @@ const getCoverLayout = (viewport: Viewport, tex: Texture): CoverLayout => {
 
 type PixiCanvasProps = {
   selectedDecoration: { name: string; size: string } | null
+  onExitPlacementMode?: () => void
 }
 
-export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -147,6 +148,8 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
   const [placedDecorations, setPlacedDecorations] = useState<PlacedDecoration[]>([])
   const [hoverCell, setHoverCell] = useState<{ col: number; row: number } | null>(null)
+  const [selectedPlacedId, setSelectedPlacedId] = useState<string | null>(null)
+  const draggingPlacedRef = useRef<{ id: string; moved: boolean } | null>(null)
 
   useEffect(() => {
     Assets.load(layoutImg).then((tex: Texture) => setBgTexture(tex))
@@ -318,66 +321,69 @@ export const PixiCanvas = ({ selectedDecoration }: PixiCanvasProps) => {
     ? getSmallTileGeometry(coverLayout.scale)
     : { smallScale: 0, smallTileWidth: 0, smallTileHeight: 0 }
 
-const parseSizeToSmallTiles = useCallback((size: string): number => {
-  const match = size.match(/(\d+(?:\.\d+)?)/)
-  const parsed = match ? parseFloat(match[1]) : NaN
-  const sizeInTiny = Number.isFinite(parsed) && parsed > 0 ? parsed : 4
+  const parseSizeToSmallTiles = useCallback((size: string): number => {
+    const match = size.match(/(\d+(?:\.\d+)?)/)
+    const parsed = match ? parseFloat(match[1]) : NaN
+    const sizeInTiny = Number.isFinite(parsed) && parsed > 0 ? parsed : 4
 
-  return sizeInTiny / TINY_PER_SMALL
-}, [])
+    return sizeInTiny / TINY_PER_SMALL
+  }, [])
 
-const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
-  if (!coverLayout || !selectedDecoration) return
+  const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
 
-  const coords = screenToGridCoords(
-    globalX,
-    globalY,
-    coverLayout.anchorWorldX,
-    coverLayout.anchorWorldY,
-    smallScale,
-  )
-  if (!coords) return
+    setSelectedPlacedId(null)
+    if (!coverLayout || !selectedDecoration) return
 
-  const sizeInSmallTiles = parseSizeToSmallTiles(selectedDecoration.size)
+    const coords = screenToGridCoords(
+      globalX,
+      globalY,
+      coverLayout.anchorWorldX,
+      coverLayout.anchorWorldY,
+      smallScale,
+    )
+    if (!coords) return
 
-  if (!isFootprintInMask(coords.col, coords.row, sizeInSmallTiles)) {
-    return
-  }
+    const sizeInSmallTiles = parseSizeToSmallTiles(selectedDecoration.size)
 
-  setPlacedDecorations((prev) => [
-    ...prev,
-    {
-      id: crypto.randomUUID(),
-      name: selectedDecoration.name,
-      col: coords.col,
-      row: coords.row,
-      widthInSmallTiles: sizeInSmallTiles,
-    },
-  ])
-}, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
-const updateHover = useCallback((globalX: number, globalY: number) => {
-  if (!coverLayout || !selectedDecoration) {
-    setHoverCell(null)
-    return
-  }
+    if (!isFootprintInMask(coords.col, coords.row, sizeInSmallTiles)) {
+      return
+    }
 
-  const coords = screenToGridCoords(
-    globalX,
-    globalY,
-    coverLayout.anchorWorldX,
-    coverLayout.anchorWorldY,
-    smallScale,
-  )
+    setPlacedDecorations((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: selectedDecoration.name,
+        col: coords.col,
+        row: coords.row,
+        widthInSmallTiles: sizeInSmallTiles,
+      },
+    ])
+  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
 
-  const sizeInSmallTiles = parseSizeToSmallTiles(selectedDecoration.size)
+  const updateHover = useCallback((globalX: number, globalY: number) => {
+    if (!coverLayout || !selectedDecoration) {
+      setHoverCell(null)
+      return
+    }
 
-  if (!coords || !isFootprintInMask(coords.col, coords.row, sizeInSmallTiles)) {
-    setHoverCell(null)
-    return
-  }
+    const coords = screenToGridCoords(
+      globalX,
+      globalY,
+      coverLayout.anchorWorldX,
+      coverLayout.anchorWorldY,
+      smallScale,
+    )
 
-  setHoverCell(coords)
-}, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
+    const sizeInSmallTiles = parseSizeToSmallTiles(selectedDecoration.size)
+
+    if (!coords || !isFootprintInMask(coords.col, coords.row, sizeInSmallTiles)) {
+      setHoverCell(null)
+      return
+    }
+
+    setHoverCell(coords)
+  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
   const startPan = useCallback((event: FederatedPointerEvent) => {
     zoomAnchorRef.current.active = false
     stopZoomAnimation()
@@ -392,6 +398,31 @@ const updateHover = useCallback((globalX: number, globalY: number) => {
   }, [stopZoomAnimation])
 
   const stopPan = useCallback((event: FederatedPointerEvent) => {
+    // Fin du déplacement d'une décoration : on vérifie que la position
+    // finale est valide (dans le masque), sinon on annule le déplacement.
+    if (draggingPlacedRef.current) {
+      const { id } = draggingPlacedRef.current
+      draggingPlacedRef.current = null
+
+      setPlacedDecorations((prev) => {
+        const deco = prev.find((d) => d.id === id)
+        if (!deco) return prev
+
+        if (!isFootprintInMask(deco.col, deco.row, deco.widthInSmallTiles)) {
+          // Position invalide : on ne peut pas facilement "annuler" ici sans
+          // garder la position d'origine à part — solution simple : on
+          // retire la décoration si elle finit hors zone. Une alternative
+          // plus douce serait de mémoriser sa position de départ et de la
+          // restaurer ; dis-moi si tu préfères ce comportement.
+          return prev.filter((d) => d.id !== id)
+        }
+
+        return prev
+      })
+
+      return
+    }
+
     const wasDragging = dragRef.current.active
     dragRef.current.active = false
     setIsDragging(false)
@@ -406,9 +437,32 @@ const updateHover = useCallback((globalX: number, globalY: number) => {
       handlePlaceClick(event.global.x, event.global.y)
     }
   }, [handlePlaceClick])
-
   const updatePan = useCallback((event: FederatedPointerEvent) => {
     updateHover(event.global.x, event.global.y)
+
+    // Si on est en train de faire glisser une décoration sélectionnée,
+    // on met à jour sa position en direct plutôt que de paner la caméra.
+    if (draggingPlacedRef.current && coverLayout) {
+      draggingPlacedRef.current.moved = true
+
+      const coords = screenToGridCoords(
+        event.global.x,
+        event.global.y,
+        coverLayout.anchorWorldX,
+        coverLayout.anchorWorldY,
+        smallScale,
+      )
+      if (!coords) return
+
+      setPlacedDecorations((prev) =>
+        prev.map((deco) =>
+          deco.id === draggingPlacedRef.current?.id
+            ? { ...deco, col: coords.col, row: coords.row }
+            : deco,
+        ),
+      )
+      return
+    }
 
     if (!dragRef.current.active) return
 
@@ -431,12 +485,25 @@ const updateHover = useCallback((globalX: number, globalY: number) => {
     cameraRef.current.y = bounded.y
 
     applyCamera()
-  }, [applyCamera, updateHover])
-
+  }, [applyCamera, updateHover, coverLayout, screenToGridCoords, smallScale])
   const handlePointerLeave = useCallback((event: FederatedPointerEvent) => {
     stopPan(event)
     setHoverCell(null)
   }, [stopPan])
+
+  const handleSelectPlaced = useCallback((id: string) => {
+    setSelectedPlacedId(id)
+  }, [])
+
+  const handleDeletePlaced = useCallback((id: string) => {
+    setPlacedDecorations((prev) => prev.filter((d) => d.id !== id))
+    setSelectedPlacedId(null)
+  }, [])
+
+  const handleDragStartPlaced = useCallback((id: string) => {
+    dragRef.current.active = false
+    draggingPlacedRef.current = { id, moved: false }
+  }, [])
 
   useEffect(() => {
     centerWorld()
@@ -485,13 +552,31 @@ const updateHover = useCallback((globalX: number, globalY: number) => {
     }
   }, [applyCamera, centerWorld, stopZoomAnimation])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedPlacedId(null)
+        onExitPlacementMode?.()
+      }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPlacedId) {
+        setPlacedDecorations((prev) => prev.filter((d) => d.id !== selectedPlacedId))
+        setSelectedPlacedId(null)
+      }
+      if (event.key === 'Escape') {
+        setSelectedPlacedId(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedPlacedId])
   return (
     <div
       onWheel={handleWheel}
       style={{ width: '100vw', height: '100vh', overflow: 'hidden', touchAction: 'none', position: 'relative' }}
     >
       <Application
-        resizeTo={window}    
+        resizeTo={window}
         backgroundAlpha={0}
         resolution={window.devicePixelRatio || 1}
         autoDensity
@@ -528,7 +613,12 @@ const updateHover = useCallback((globalX: number, globalY: number) => {
                 offsetY={coverLayout.anchorWorldY}
                 smallScale={smallScale}
                 smallTileWidth={smallTileWidth}
-                smallTileHeight={smallTileHeight} 
+                smallTileHeight={smallTileHeight}
+                selectedPlacedId={selectedPlacedId}
+                onSelectPlaced={handleSelectPlaced}
+                onDragStart={handleDragStartPlaced}
+                onDeletePlaced={handleDeletePlaced}
+                interactive={!selectedDecoration}
               />
             </>
           )}

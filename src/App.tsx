@@ -42,7 +42,7 @@ function App() {
         overflow="hidden"
         zIndex={0}
       >
-        <PixiCanvas selectedDecoration={selectedDecoration} />
+        <PixiCanvas selectedDecoration={selectedDecoration} onExitPlacementMode={() => setSelectedDecoration(null)}/>
       </Box>
 
      <Box position="relative" h="100vh" pointerEvents="none">
@@ -70,7 +70,7 @@ function App() {
       </IconButton>
     </Box>
   )}
-</Box>
+      </Box>
     </Box>
   )
 }

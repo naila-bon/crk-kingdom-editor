@@ -1,6 +1,4 @@
-//decorationsLayer.tsx
-//decorationsLayer.tsx
-import { Assets, Texture } from 'pixi.js'
+import { Assets, Texture, type FederatedPointerEvent } from 'pixi.js'
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { isoToScreen } from '../../utils/gridUtils'
 import { getVisibleBottomFraction } from '../../utils/textureBounds'
@@ -11,9 +9,9 @@ const decorationByName = new Map(
   (decorations as { name: string; imageUrl?: string }[]).map((d) => [d.name, d]),
 )
 
-// Petite correction résiduelle pour l'ombre au sol dans le PNG lui-même
-// (indépendante de la taille du footprint, garde une petite valeur).
 const ANCHOR_Y_ADJUSTMENT_PX = 12
+const DELETE_BUTTON_RADIUS = 12
+const DELETE_BUTTON_MARGIN = 8
 
 type DecorationsLayerProps = {
   placed: PlacedDecoration[]
@@ -22,6 +20,11 @@ type DecorationsLayerProps = {
   smallScale: number
   smallTileWidth: number
   smallTileHeight: number
+  selectedPlacedId: string | null
+  onSelectPlaced: (id: string) => void
+  onDragStart: (id: string) => void
+  onDeletePlaced: (id: string) => void
+  interactive: boolean
   debug?: boolean
 }
 
@@ -32,6 +35,11 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
   smallScale,
   smallTileWidth,
   smallTileHeight,
+  selectedPlacedId,
+  onSelectPlaced,
+  onDragStart,
+  onDeletePlaced,
+  interactive,
   debug = false,
 }) => {
   const [textures, setTextures] = useState<Map<string, Texture>>(new Map())
@@ -105,7 +113,6 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
         const spriteScale = targetWidth / texture.width
 
         const { x, y: centerY } = isoToScreen(deco.col, deco.row, offsetX, offsetY, smallScale)
-
         const footprintFrontOffset = (deco.widthInSmallTiles * smallTileHeight) / 2
         const y = centerY + footprintFrontOffset
 
@@ -118,6 +125,13 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
         const spriteLeft = x - displayWidth / 2
         const spriteTop = y - anchorY * displayHeight
 
+        const isSelected = deco.id === selectedPlacedId
+
+        // Position du bouton de suppression : coin haut-droit de la
+        // bounding box du sprite, légèrement décalé vers l'extérieur.
+        const deleteButtonX = spriteLeft + displayWidth + DELETE_BUTTON_MARGIN
+        const deleteButtonY = spriteTop - DELETE_BUTTON_MARGIN
+
         return (
           <>
             <pixiSprite
@@ -127,7 +141,60 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
               y={y}
               anchor={{ x: 0.5, y: anchorY }}
               scale={spriteScale}
+              eventMode={interactive ? 'static' : 'none'}
+              cursor={interactive ? 'pointer' : 'default'}
+              onPointerDown={
+                interactive
+                  ? (event: FederatedPointerEvent) => {
+                      event.stopPropagation()
+                      onSelectPlaced(deco.id)
+                      onDragStart(deco.id)
+                    }
+                  : undefined
+              }
             />
+
+            {isSelected && interactive && (
+              <>
+                <pixiGraphics
+                  key={`selection-${deco.id}`}
+                  draw={(g) => {
+                    g.clear()
+                    g.rect(spriteLeft, spriteTop, displayWidth, displayHeight)
+                    g.stroke({ width: 2, color: 0x3b82f6, alpha: 0.9 })
+                  }}
+                />
+
+                <pixiGraphics
+                  key={`delete-${deco.id}`}
+                  x={deleteButtonX}
+                  y={deleteButtonY}
+                  eventMode="static"
+                  cursor="pointer"
+                  onPointerDown={(event: FederatedPointerEvent) => {
+                    // Empêche le clic de démarrer un pan ou de retomber sur
+                    // le sprite en dessous.
+                    event.stopPropagation()
+                    onDeletePlaced(deco.id)
+                  }}
+                  draw={(g) => {
+                    g.clear()
+                    // Cercle rouge de fond.
+                    g.circle(0, 0, DELETE_BUTTON_RADIUS)
+                    g.fill({ color: 0xef4444, alpha: 1 })
+                    g.stroke({ width: 1.5, color: 0xffffff, alpha: 1 })
+
+                    // Croix blanche dessinée à l'intérieur du cercle.
+                    const crossSize = DELETE_BUTTON_RADIUS * 0.5
+                    g.moveTo(-crossSize, -crossSize)
+                      .lineTo(crossSize, crossSize)
+                      .moveTo(crossSize, -crossSize)
+                      .lineTo(-crossSize, crossSize)
+                      .stroke({ width: 2, color: 0xffffff, alpha: 1 })
+                  }}
+                />
+              </>
+            )}
 
             {debug && (
               <pixiGraphics
@@ -152,4 +219,4 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
       })}
     </>
   )
-}
+} 
