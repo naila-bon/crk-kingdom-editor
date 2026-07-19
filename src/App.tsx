@@ -1,9 +1,9 @@
 import { Box, IconButton, Text } from '@chakra-ui/react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
 import layoutImage from 'src/assets/crk_layout/crk_layout.png'
-import { Eye } from 'lucide-react'
+import { Eye, Undo2, Redo2 } from 'lucide-react'
 
 type Decoration = {
   name: string
@@ -15,11 +15,22 @@ type Decoration = {
   imageUrl?: string
 }
 
+type HistoryInfo = {
+  undo: () => void
+  redo: () => void
+  canUndo: boolean
+  canRedo: boolean
+}
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [selectedDecoration, setSelectedDecoration] = useState<Decoration | null>(null)
   const [browserOpen, setBrowserOpen] = useState(true)
+  const [history, setHistory] = useState<HistoryInfo | null>(null)
 
+  const handleHistoryChange = useCallback((info: HistoryInfo) => {
+    setHistory(info)
+  }, [])
   return (
     <Box
       position="relative"
@@ -41,9 +52,29 @@ function App() {
         <PixiCanvas
           selectedDecoration={selectedDecoration}
           onExitPlacementMode={() => setSelectedDecoration(null)}
+          onHistoryChange={handleHistoryChange}
         />
       </Box>
-
+  {/* Undo / Redo controls, top-left */}
+      <Box position="absolute" top={4} left={4} zIndex={3} pointerEvents="auto">
+        <IconButton
+          aria-label="Undo"
+          size="sm"
+          mr={2}
+          onClick={() => history?.undo()}
+          disabled={!history?.canUndo}
+        >
+          <Undo2 />
+        </IconButton>
+        <IconButton
+          aria-label="Redo"
+          size="sm"
+          onClick={() => history?.redo()}
+          disabled={!history?.canRedo}
+        >
+          <Redo2 />
+        </IconButton>
+      </Box>
       {/* Status banner, top center — reflects current mode. */}
       <Box
         position="absolute"
