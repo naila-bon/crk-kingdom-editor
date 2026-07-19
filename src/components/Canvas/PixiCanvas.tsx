@@ -17,6 +17,7 @@ import { DecorationsLayer } from './DecorationsLayer'
 import type { PlacedDecoration } from '../../types/decorations'
 import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, TINY_PER_SMALL } from '@/utils/gridUtils'
 import { HoverHighlight } from './HoverHighlight'
+import { useHistoryState } from '../../hooks/useHistoryState'
 
 extend({
   Container,
@@ -30,7 +31,7 @@ const ZOOM_SENSITIVITY = 0.0012
 const ZOOM_SMOOTHING = 0.2
 const ZOOM_EPSILON = 0.001
 
-const CLICK_MOVE_THRESHOLD = 5
+const CLICK_MOVE_THRESHOLD = 10
 
 const IMG_ANCHOR_PX = { x: 2160, y: 695 }
 
@@ -130,9 +131,15 @@ const getCoverLayout = (viewport: Viewport, tex: Texture): CoverLayout => {
 type PixiCanvasProps = {
   selectedDecoration: { name: string; size: string } | null
   onExitPlacementMode?: () => void
+  onHistoryChange?: (info: {
+    undo: () => void
+    redo: () => void
+    canUndo: boolean
+    canRedo: boolean
+  }) => void
 }
 
-export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanvasProps) => {
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -146,7 +153,24 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
   const [isDragging, setIsDragging] = useState(false)
   const [viewportSize, setViewportSize] = useState<Viewport>(viewportRef.current)
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
-  const [placedDecorations, setPlacedDecorations] = useState<PlacedDecoration[]>([])
+
+const {
+  state: placedDecorations,
+  setLive: setPlacedDecorationsLive,
+  commit: commitPlacedDecorations,
+  beginInteraction: beginDecorInteraction,
+  commitInteraction: commitDecorInteraction,
+  cancelInteraction: cancelDecorInteraction,
+  undo: undoDecorations,
+  redo: redoDecorations,
+  canUndo,
+  canRedo,
+} = useHistoryState<PlacedDecoration[]>([])
+
+useEffect(() => {
+  onHistoryChange?.({ undo: undoDecorations, redo: redoDecorations, canUndo, canRedo })
+}, [onHistoryChange, undoDecorations, redoDecorations, canUndo, canRedo])
+
   const [hoverCell, setHoverCell] = useState<{ col: number; row: number } | null>(null)
   const [selectedPlacedId, setSelectedPlacedId] = useState<string | null>(null)
   const draggingPlacedRef = useRef<{ id: string; moved: boolean } | null>(null)
@@ -330,7 +354,6 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
   }, [])
 
   const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
-
     setSelectedPlacedId(null)
     if (!coverLayout || !selectedDecoration) return
 
@@ -349,7 +372,7 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
       return
     }
 
-    setPlacedDecorations((prev) => [
+    commitPlacedDecorations((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
@@ -359,7 +382,7 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
         widthInSmallTiles: sizeInSmallTiles,
       },
     ])
-  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
+  }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles, commitPlacedDecorations])
 
   const updateHover = useCallback((globalX: number, globalY: number) => {
     if (!coverLayout || !selectedDecoration) {
@@ -384,6 +407,7 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
 
     setHoverCell(coords)
   }, [coverLayout, screenToGridCoords, selectedDecoration, smallScale, parseSizeToSmallTiles])
+
   const startPan = useCallback((event: FederatedPointerEvent) => {
     zoomAnchorRef.current.active = false
     stopZoomAnimation()
@@ -398,28 +422,23 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
   }, [stopZoomAnimation])
 
   const stopPan = useCallback((event: FederatedPointerEvent) => {
-    // Fin du déplacement d'une décoration : on vérifie que la position
-    // finale est valide (dans le masque), sinon on annule le déplacement.
     if (draggingPlacedRef.current) {
-      const { id } = draggingPlacedRef.current
+      const { id, moved } = draggingPlacedRef.current
       draggingPlacedRef.current = null
 
-      setPlacedDecorations((prev) => {
-        const deco = prev.find((d) => d.id === id)
-        if (!deco) return prev
+      if (!moved) {
+        cancelDecorInteraction()
+        return
+      }
 
-        if (!isFootprintInMask(deco.col, deco.row, deco.widthInSmallTiles)) {
-          // Position invalide : on ne peut pas facilement "annuler" ici sans
-          // garder la position d'origine à part — solution simple : on
-          // retire la décoration si elle finit hors zone. Une alternative
-          // plus douce serait de mémoriser sa position de départ et de la
-          // restaurer ; dis-moi si tu préfères ce comportement.
-          return prev.filter((d) => d.id !== id)
-        }
+      const deco = placedDecorations.find((d) => d.id === id)
+      if (deco && !isFootprintInMask(deco.col, deco.row, deco.widthInSmallTiles)) {
+        cancelDecorInteraction()
+        setPlacedDecorationsLive((prev) => prev.filter((d) => d.id !== id))
+        return
+      }
 
-        return prev
-      })
-
+      commitDecorInteraction()
       return
     }
 
@@ -436,12 +455,11 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
     if (movedDistance <= CLICK_MOVE_THRESHOLD) {
       handlePlaceClick(event.global.x, event.global.y)
     }
-  }, [handlePlaceClick])
+  }, [handlePlaceClick, placedDecorations, cancelDecorInteraction, commitDecorInteraction, setPlacedDecorationsLive])
+
   const updatePan = useCallback((event: FederatedPointerEvent) => {
     updateHover(event.global.x, event.global.y)
 
-    // Si on est en train de faire glisser une décoration sélectionnée,
-    // on met à jour sa position en direct plutôt que de paner la caméra.
     if (draggingPlacedRef.current && coverLayout) {
       draggingPlacedRef.current.moved = true
 
@@ -454,7 +472,7 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
       )
       if (!coords) return
 
-      setPlacedDecorations((prev) =>
+      setPlacedDecorationsLive((prev) =>
         prev.map((deco) =>
           deco.id === draggingPlacedRef.current?.id
             ? { ...deco, col: coords.col, row: coords.row }
@@ -485,7 +503,8 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
     cameraRef.current.y = bounded.y
 
     applyCamera()
-  }, [applyCamera, updateHover, coverLayout, screenToGridCoords, smallScale])
+  }, [applyCamera, updateHover, coverLayout, screenToGridCoords, smallScale, setPlacedDecorationsLive])
+
   const handlePointerLeave = useCallback((event: FederatedPointerEvent) => {
     stopPan(event)
     setHoverCell(null)
@@ -496,14 +515,15 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
   }, [])
 
   const handleDeletePlaced = useCallback((id: string) => {
-    setPlacedDecorations((prev) => prev.filter((d) => d.id !== id))
+    commitPlacedDecorations((prev) => prev.filter((d) => d.id !== id))
     setSelectedPlacedId(null)
-  }, [])
+  }, [commitPlacedDecorations])
 
   const handleDragStartPlaced = useCallback((id: string) => {
     dragRef.current.active = false
     draggingPlacedRef.current = { id, moved: false }
-  }, [])
+    beginDecorInteraction()
+  }, [beginDecorInteraction])
 
   useEffect(() => {
     centerWorld()
@@ -554,22 +574,38 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode }: PixiCanv
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const isMeta = event.ctrlKey || event.metaKey
+
+      if (isMeta && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) {
+          redoDecorations()
+        } else {
+          undoDecorations()
+        }
+        return
+      }
+
+      if (isMeta && event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        redoDecorations()
+        return
+      }
+
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPlacedId) {
+        commitPlacedDecorations((prev) => prev.filter((d) => d.id !== selectedPlacedId))
+        setSelectedPlacedId(null)
+      }
       if (event.key === 'Escape') {
         setSelectedPlacedId(null)
         onExitPlacementMode?.()
-      }
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPlacedId) {
-        setPlacedDecorations((prev) => prev.filter((d) => d.id !== selectedPlacedId))
-        setSelectedPlacedId(null)
-      }
-      if (event.key === 'Escape') {
-        setSelectedPlacedId(null)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedPlacedId])
+  }, [selectedPlacedId, commitPlacedDecorations, undoDecorations, redoDecorations, onExitPlacementMode])
+
   return (
     <div
       onWheel={handleWheel}
