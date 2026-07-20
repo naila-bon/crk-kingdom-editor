@@ -143,9 +143,10 @@ type PixiCanvasProps = {
     canUndo: boolean
     canRedo: boolean
   }) => void
+  onZoomControlsReady?: (controls: { zoomIn: () => void; zoomOut: () => void }) => void
 }
 
-export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange }: PixiCanvasProps) => {
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -349,6 +350,10 @@ useEffect(() => {
 
   const zoomIn = useCallback(() => zoomTo(zoomRef.current + ZOOM_BUTTON_STEP), [zoomTo])
   const zoomOut = useCallback(() => zoomTo(zoomRef.current - ZOOM_BUTTON_STEP), [zoomTo])
+
+  useEffect(() => {
+    onZoomControlsReady?.({ zoomIn, zoomOut })
+  }, [onZoomControlsReady, zoomIn, zoomOut])
 
   const centerWorld = useCallback(() => {
     const centerX = viewportRef.current.width / 2
@@ -848,12 +853,6 @@ useEffect(() => {
         }}
       >
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={zoomIn} style={buttonStyle}>
-            +
-          </button>
-          <button type="button" onClick={zoomOut} style={buttonStyle}>
-            -
-          </button>
         </div>
       </div>
     </div>

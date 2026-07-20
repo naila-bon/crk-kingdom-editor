@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
 import layoutImage from 'src/assets/crk_layout/crk_layout.png'
-import { Eye, Undo2, Redo2 } from 'lucide-react'
+import { Eye, Plus, Minus, Undo2, Redo2 } from 'lucide-react'
 
 type Decoration = {
   name: string
@@ -26,6 +26,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [selectedDecoration, setSelectedDecoration] = useState<Decoration | null>(null)
   const [history, setHistory] = useState<HistoryInfo | null>(null)
+  const [zoomControls, setZoomControls] = useState<{ zoomIn: () => void; zoomOut: () => void } | null>(null)
 
   const handleHistoryChange = useCallback((info: HistoryInfo) => {
     setHistory(info)
@@ -52,6 +53,7 @@ function App() {
           selectedDecoration={selectedDecoration}
           onExitPlacementMode={() => setSelectedDecoration(null)}
           onHistoryChange={handleHistoryChange}
+          onZoomControlsReady={setZoomControls}
         />
       </Box>
   {/* Undo / Redo controls, top-left */}
@@ -102,6 +104,24 @@ function App() {
         )}
       </Box>
 
+      <Box position="absolute" left={4} bottom={16} zIndex={3} pointerEvents="auto" display="flex" flexDirection="column" gap={2}>
+        <IconButton
+          aria-label="Zoom in"
+          size="sm"
+          onClick={() => zoomControls?.zoomIn()}
+          disabled={!zoomControls}
+        >
+          <Plus />
+        </IconButton>
+        <IconButton
+          aria-label="Zoom out"
+          size="sm"
+          onClick={() => zoomControls?.zoomOut()}
+          disabled={!zoomControls}
+        >
+          <Minus />
+        </IconButton>
+      </Box>
       <Box position="relative" h="100vh" pointerEvents="none">
         {sidebarOpen ? (
           <Box
