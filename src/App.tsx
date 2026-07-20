@@ -25,7 +25,6 @@ type HistoryInfo = {
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [selectedDecoration, setSelectedDecoration] = useState<Decoration | null>(null)
-  const [browserOpen, setBrowserOpen] = useState(true)
   const [history, setHistory] = useState<HistoryInfo | null>(null)
 
   const handleHistoryChange = useCallback((info: HistoryInfo) => {
