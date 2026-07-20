@@ -1,5 +1,4 @@
-//decorBrowser.tsx
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   Badge,
@@ -7,15 +6,18 @@ import {
   Button,
   Heading,
   HStack,
+  IconButton,
   Image,
+  Input,
+  SimpleGrid,
   Stack,
   Text,
   VStack,
-  SimpleGrid,
-  IconButton,
 } from '@chakra-ui/react'
+
+import { EyeClosed, ArrowLeft } from 'lucide-react'
+
 import decorations from '../../scripts/crk_decors_avec_noms_843.json'
-import { EyeClosed } from 'lucide-react'
 
 type Decoration = {
   name: string
@@ -29,178 +31,458 @@ type Decoration = {
 
 const items = decorations as unknown as Decoration[]
 
-const categories = Array.from(new Set(items.map((item) => item.theme))).sort((left, right) =>
-  left.localeCompare(right),
-)
+const categories = Array.from(
+  new Set(items.map((item) => item.theme)),
+).sort((a, b) => a.localeCompare(b))
+
+const panelBg = '#2e334e'
+const surfaceBg = '#3d466a'
+const surfaceHoverBg = '#364075'
+const overlayBg = 'rgba(22, 28, 55, 0.50)'
+const cardSelectedBg = 'rgba(61, 70, 106, 0.96)'
+const controlBg = 'rgba(20, 28, 55, 0.88)'
+
 
 type DecorBrowserProps = {
   onClose?: () => void
-  // Nom de la décoration actuellement sélectionnée (pour l'affichage en
-  // surbrillance), contrôlé par le parent.
+
   selectedDecorationName?: string | null
-  // Appelé quand l'utilisateur clique sur une décoration pour la sélectionner
-  // (prête à être posée sur la grille).
-  onSelectDecoration?: (decoration: Decoration) => void
+
+  onSelectDecoration?: (decoration: Decoration | null) => void
 }
 
-export function DecorBrowser({ onClose, selectedDecorationName, onSelectDecoration }: DecorBrowserProps) {
-  const [selectedCategory, setSelectedCategory] = useState('')
 
-  const filteredDecorations = selectedCategory
-    ? items.filter((item) => item.theme === selectedCategory)
-    : []
+export function DecorBrowser({
+  onClose,
+  selectedDecorationName,
+  onSelectDecoration,
+}: DecorBrowserProps) {
+
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [search, setSearch] = useState('')
+
+
+  const categoryItems = useMemo(() => {
+    return categories.map((category) => {
+      const decorations = items.filter(
+        (item) => item.theme === category,
+      )
+
+      return {
+        name: category,
+        count: decorations.length,
+        preview: decorations.find(
+          (d) => d.imageUrl,
+        )?.imageUrl,
+      }
+    })
+  }, [])
+
+  const filteredCategoryItems = useMemo(() => {
+    if (!search) {
+      return categoryItems
+    }
+
+    return categoryItems.filter((category) =>
+      category.name.toLowerCase().includes(search.toLowerCase()),
+    )
+  }, [categoryItems, search])
+
+
+  const filteredDecorations = useMemo(() => {
+
+    if (!selectedCategory) {
+      return []
+    }
+
+    return items.filter((item) => {
+
+      const matchCategory =
+        item.theme === selectedCategory
+
+      const matchSearch =
+        item.name
+          .toLowerCase()
+          .includes(search.toLowerCase())
+
+      return matchCategory && matchSearch
+    })
+
+  }, [
+    selectedCategory,
+    search,
+  ])
 
   return (
     <Box
-      w="full"
+      w="sm"
       h="full"
       position="relative"
       color="white"
-      p={4}
+      p={3}
       overflow="hidden"
+      bg={panelBg}
+      display="flex"
+      flexDirection="column"
     >
-      {onClose ? (
-        <IconButton aria-label="Close" position="absolute" top={6} right={6} size="sm" zIndex={5} onClick={onClose}><EyeClosed /></IconButton>
-      ) : null}
-      <Stack direction="column" gap={4} h="full" >
-        { ! selectedCategory ? (
-          <Box
-            w="full"
-            rounded="3xl"
-            border="1px solid"
-            borderColor="whiteAlpha.200"
-            bg="rgba(11, 15, 23, 1)"
-            p={5}
-            shadow="xl"
-          >
-            <VStack align="stretch" gap={4}>
-              <Box>
-                <Heading size="lg">Collections</Heading>
-                <Text color="whiteAlpha.700" mt={1}>
-                  Click on a collection to display the associated decorations.
-                </Text>
+      <Stack h="full" gap={1}>
+        <HStack justify="space-between" align="center" flexWrap="wrap" gap={4}>
+          <HStack flex="1" minW={{ base: '100%' }} gap={2} align="center" mb={3}>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={
+                selectedCategory
+                  ? 'Search within collection…'
+                  : 'Search for a theme…'
+              }
+              bg={surfaceBg}
+              border="1px solid"
+              borderColor="whiteAlpha.200"
+              rounded="3xl"
+              color="white"
+              _placeholder={{ color: 'whiteAlpha.500' }}
+              flex={1}
+            />
+            {onClose && (
+              <Box top={3} right={3} zIndex={3} pointerEvents="auto">
+                <IconButton aria-label="Close" size="sm" onClick={onClose}>
+                  <EyeClosed size={18} />
+                </IconButton>
               </Box>
+            )}
+          </HStack>
+        </HStack>
+        {
+          !selectedCategory ? (
 
-              <VStack align="stretch" gap={2} maxH="80vh" overflowY="auto" pr={1} minW={0}>
-                {categories.map((category) => {
-                  const isActive = category === selectedCategory
-
-                  return (
-                    <Button
-                      key={category}
-                      onClick={() => {
-                        setSelectedCategory(category)
-                      }}
-                      justifyContent="space-between"
-                      variant={isActive ? 'solid' : 'subtle'}
-                      colorPalette={isActive ? 'cyan' : 'gray'}
-                      size="lg"
-                      rounded="2xl"
-                      fontWeight="semibold"
-                      bg={isActive ? 'cyan.500' : 'whiteAlpha.100'}
-                      _hover={{ bg: isActive ? 'cyan.400' : 'whiteAlpha.200' }}
-                    >
-                      {category}
-                      <Badge ml={3} colorPalette={isActive ? 'cyan' : 'gray'}>
-                        {items.filter((item) => item.theme === category).length}
-                      </Badge>
-                    </Button>
-                  )
-                })}
-              </VStack>
-            </VStack>
-          </Box>
-        ): null}  
-
-        <Box flex="1" minW={0}             
-            w="full"
-            rounded="3xl"
-            border="1px solid"
-            borderColor="whiteAlpha.200"
-            bg="rgba(11, 15, 23, 1)"
-            p={5}
-            shadow="xl">
-          { selectedCategory ? (
-            <>
-              <HStack mb={4} gap={3} align="center" >
-                <Button variant="ghost" size="sm" onClick={() => { setSelectedCategory('') }}>
-                  Collections
-                </Button>
-                <Text color="whiteAlpha.500">›</Text>
-                <Heading size="md">{selectedCategory}</Heading>
-              </HStack>
-
-              <HStack justify="space-between" align="center" mb={5}>
-                <Box>
-                  <Heading size="2xl">{selectedCategory}</Heading>
-                  <Text color="whiteAlpha.700" mt={1}>
-                    {filteredDecorations.length} decoration{filteredDecorations.length > 1 ? 's' : ''} found
-                  </Text>
-                </Box>
-              </HStack>
-
-              <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} maxH="80vh" overflowY="auto" pr={1} >
-                {filteredDecorations.map((decoration) => {
-                  const isSelected = decoration.name === selectedDecorationName
-
-                  return (
+            <Box flex="1" minH={0} overflow="hidden">
+              <Box
+                h="full"
+                overflowY="auto"
+                p={2}
+                css={{
+                  scrollbarWidth: 'none',
+                  '&::-webkit-scrollbar': {
+                    display: 'none',
+                  },
+                }}
+              >
+                <SimpleGrid
+                  columns={{ base: 1, md: 2, xl: 3 }}
+                  gap={4}
+                >
+                  {filteredCategoryItems.map((category) => (
                     <Box
-                      key={`${decoration.theme}-${decoration.name}`}
-                      role="button"
-                      tabIndex={0}
+                      key={category.name}
                       cursor="pointer"
-                      onClick={() => onSelectDecoration?.(decoration)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') onSelectDecoration?.(decoration)
-                      }}
                       rounded="2xl"
-                      border="2px solid"
-                      borderColor={isSelected ? 'cyan.400' : 'whiteAlpha.200'}
-                      bg={isSelected ? 'cyan.900' : 'whiteAlpha.100'}
                       overflow="hidden"
-                      shadow={isSelected ? 'dark-lg' : 'lg'}
-                      transition="border-color 0.15s, background 0.15s"
-                      _hover={{ borderColor: isSelected ? 'cyan.400' : 'whiteAlpha.400' }}
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg={surfaceBg}
+                      transition="all .2s"
+                      display="flex"
+                      flexDirection="column"
+                      aspectRatio={1}
+                      minH={0}
+                      boxShadow="0 12px 30px rgba(0, 0, 0, 0.12)"
+                      _hover={{
+                        transform: 'translateY(-2px)',
+                        borderColor: 'cyan.300',
+                        boxShadow: '0 16px 40px rgba(56, 189, 248, 0.12)',
+                        bg: surfaceHoverBg,
+                      }}
+                      onClick={() => setSelectedCategory(category.name)}
                     >
-                      <Box aspectRatio={1} bg="blackAlpha.300" position="relative">
-                        {decoration.imageUrl ? (
-                          <Image src={decoration.imageUrl} alt={decoration.name} objectFit="contain" w="full" h="full" />
+                      <Box
+                        flex="1"
+                        position="relative"
+                        bg={panelBg}
+                        overflow="hidden"
+                      >
+                        {category.preview ? (
+                          <Image
+                            src={category.preview}
+                            w="full"
+                            h="full"
+                            objectFit="cover"
+                            objectPosition="top"
+                          />
                         ) : null}
-                        {isSelected ? (
-                          <Badge position="absolute" top={2} right={2} colorPalette="cyan">
-                            Selected
-                          </Badge>
-                        ) : null}
+                        <Box position="absolute" inset={0} bg={overlayBg} />
                       </Box>
 
-                      <VStack align="stretch" gap={3} p={4}>
-                        <Box>
-                          <Heading size="md">{decoration.name}</Heading>
-                          <Text color="whiteAlpha.700" fontSize="sm">
-                            {decoration.theme}
-                          </Text>
-                        </Box>
-
-                        <HStack wrap="wrap" gap={2}>
-                          <Badge colorPalette="cyan">{decoration.size}</Badge>
-                          <Badge colorPalette="orange">{decoration.points} pts</Badge>
-                          {decoration.color ? <Badge colorPalette="purple">{decoration.color}</Badge> : null}
-                        </HStack>
-
-                        {decoration.note ? (
-                          <Text fontSize="sm" color="whiteAlpha.700">
-                            {decoration.note}
-                          </Text>
-                        ) : null}
+                      <VStack align="stretch" p={4} gap={1}>
+                        <Heading size="sm">{category.name}</Heading>
+                        <Text
+                          fontSize="sm"
+                          color="whiteAlpha.600"
+                        >{category.count} decorations</Text>
                       </VStack>
                     </Box>
-                  )
-                })}
-              </SimpleGrid>
-            </>
-          ) : null}
-        </Box>
+                  ))}
+                </SimpleGrid>
+              </Box>
+            </Box>
+
+          ) : null
+        }
+        {
+          selectedCategory && (
+            <>
+              <Stack gap={2}>
+                <HStack
+                  gap={3}
+                  align="center"
+                  flexWrap="wrap"
+                >
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    rounded="full"
+                    borderColor="whiteAlpha.300"
+                    bg={surfaceBg}
+                    px={3}
+                    minW="auto"
+                    h={8}
+                    lineHeight="1"
+                    _hover={{ bg: surfaceHoverBg }}
+                    onClick={() => {
+                      setSelectedCategory('')
+                      setSearch('')
+                    }}
+                  >
+                    <ArrowLeft size={14} />
+                    Collections
+                  </Button>
+
+                  <Text color="whiteAlpha.500">/</Text>
+
+                  <Box>
+                    <Heading size="sm" fontWeight="semibold">
+                      {selectedCategory}
+                    </Heading>
+
+                  </Box>
+
+                </HStack>
+                <Text
+                  ml={2}
+                  fontSize="xs"
+                  color="whiteAlpha.500"
+                  letterSpacing="wide"
+                >
+                  {filteredDecorations.length} decoration
+                  {filteredDecorations.length > 1 ? 's' : ''} available
+                </Text>
+              </Stack>
+              <Box flex="1" minH={0} overflow="hidden" >
+
+                <Box
+                  h={'full'}
+                  overflowY="auto"
+                  p={2}
+                  css={{
+                    scrollbarWidth: "none",
+                    "&::-webkit-scrollbar": {
+                      display: "none",
+                    },
+                  }}
+                >
+
+                  <SimpleGrid
+                    columns={{
+                      base: 1,
+                      md: 2,
+                      xl: 3,
+                    }}
+                    gap={5}
+                  >
+
+                    {
+                      filteredDecorations.map((decoration) => {
+
+                        const isSelected =
+                          decoration.name === selectedDecorationName
+
+
+                        return (
+
+                          <Box
+                            key={`${decoration.theme}-${decoration.name}`}
+                            cursor="pointer"
+                            rounded="3xl"
+                            overflow="hidden"
+                            position="relative"
+                            border="1px solid"
+                            borderColor={
+                              isSelected ? 'cyan.300' : 'whiteAlpha.200'
+                            }
+                            bg={isSelected ? cardSelectedBg : surfaceBg}
+                            transition="all .2s"
+                            _hover={{
+                              transform: 'translateY(-5px) scale(1.01)',
+                              boxShadow: '0 24px 60px rgba(56, 189, 248, 0.12)',
+                              borderColor: 'cyan.300',
+                            }}
+                            onClick={() =>
+                              onSelectDecoration?.(
+                                isSelected ? null : decoration
+                              )
+                            }
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === "Enter" ||
+                                e.key === " "
+                              ) {
+                                onSelectDecoration?.(
+                                  isSelected ? null : decoration
+                                )
+
+                              }
+                            }}
+                            tabIndex={0}
+                            role="button"
+                          >
+                            {
+                              isSelected && (
+                                <Badge
+                                  position="absolute"
+                                  top={3}
+                                  right={3}
+                                  zIndex={2}
+                                  colorPalette="cyan"
+                                  rounded="full"
+                                  px={3}
+                                  bg={controlBg}
+                                >
+                                  Selected
+                                </Badge>
+                              )
+                            }
+
+                            <Box
+                              aspectRatio={1.15}
+                              bg={controlBg}
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                            >
+                              {
+                                decoration.imageUrl && (
+                                  <Image
+                                    src={
+                                      decoration.imageUrl
+                                    }
+                                    alt={
+                                      decoration.name
+                                    }
+                                    w="full"
+                                    h="full"
+                                    objectFit="contain"
+                                    transition="transform .25s"
+                                    _groupHover={{
+                                      transform: "scale(1.08)"
+                                    }}
+                                  />
+                                )
+                              }
+                            </Box>
+                            <VStack
+                              align="stretch"
+                              gap={3}
+                              p={3}
+                            >
+                              <Box>
+                                <Heading
+                                  size="md"
+                                >
+                                  {
+                                    decoration.name
+                                  }
+                                </Heading>
+                                <Text
+                                  fontSize="sm"
+                                  color="whiteAlpha.600"
+                                >
+                                  {
+                                    decoration.theme
+                                  }
+                                </Text>
+                              </Box>
+                              <HStack
+                                wrap="wrap"
+                                gap={2}
+                              >
+
+                                <Badge
+                                  rounded="full"
+                                  colorPalette="gray"
+                                >
+
+                                  📐 {decoration.size}
+
+                                </Badge>
+
+
+                                <Badge
+                                  rounded="full"
+                                  colorPalette="orange"
+                                  bg={controlBg}
+                                  color="white"
+                                >
+
+                                  ⭐ {decoration.points}
+
+                                  {" "}
+                                  pts
+
+                                </Badge>
+
+
+
+                                {
+                                  decoration.color && (
+
+                                    <Badge
+                                      rounded="full"
+                                      colorPalette="gray"
+                                      bg="whiteAlpha.100"
+                                      color="white"
+                                    >
+                                      🎨 {decoration.color}
+                                    </Badge>
+
+                                  )
+                                }
+
+
+                              </HStack>
+                            </VStack>
+                          </Box>
+
+                        )
+
+                      })
+                    }
+
+
+                  </SimpleGrid>
+
+
+                </Box>
+
+
+              </Box></>
+
+          )
+        }
+
       </Stack>
+
     </Box>
+
   )
+
 }
