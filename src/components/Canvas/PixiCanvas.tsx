@@ -1,6 +1,6 @@
 //pixiCanvas.tsx
 import { Application, extend } from '@pixi/react'
-import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Assets,
   Container,
@@ -32,7 +32,6 @@ const ZOOM_SMOOTHING = 0.2
 const ZOOM_EPSILON = 0.001
 
 const CLICK_MOVE_THRESHOLD = 10
-const PAN_STEP = 40
 const ZOOM_BUTTON_STEP = 0.15
 
 const IMG_ANCHOR_PX = { x: 2160, y: 695 }
@@ -160,6 +159,7 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryC
   const [isDragging, setIsDragging] = useState(false)
   const [viewportSize, setViewportSize] = useState<Viewport>(viewportRef.current)
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
 
 const {
   state: placedDecorations,
@@ -231,20 +231,6 @@ useEffect(() => {
     zoomTargetRef.current = zoomRef.current
     applyCamera()
   }, [applyCamera, clampZoom])
-
-  const moveCamera = useCallback((dx: number, dy: number) => {
-    const candidateX = cameraRef.current.x + dx
-    const candidateY = cameraRef.current.y + dy
-    const bounded = clampCameraToWorld(
-      candidateX,
-      candidateY,
-      zoomRef.current,
-      viewportRef.current,
-      coverLayout ?? undefined,
-      bgTexture ?? undefined,
-    )
-    setCamera(bounded.x, bounded.y)
-  }, [setCamera, coverLayout, bgTexture])
 
   const getViewportCenterWorld = useCallback(() => {
     const centerX = viewportRef.current.width / 2
@@ -409,32 +395,42 @@ useEffect(() => {
     }
   }, [centerWorld])
 
-  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+  const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault()
+    stopZoomAnimation()
 
     const zoomLimits = getZoomLimits()
     const oldZoom = zoomRef.current
     const zoomFactor = Math.exp(-event.deltaY * ZOOM_SENSITIVITY)
-    const nextZoom = clamp(zoomTargetRef.current * zoomFactor, zoomLimits.minZoom, zoomLimits.maxZoom)
+    const nextZoom = clamp(zoomRef.current * zoomFactor, zoomLimits.minZoom, zoomLimits.maxZoom)
 
-    if (nextZoom === zoomTargetRef.current) return
+    if (nextZoom === zoomRef.current) return
 
     const cursorX = event.clientX
     const cursorY = event.clientY
     const worldX = (cursorX - cameraRef.current.x) / oldZoom
     const worldY = (cursorY - cameraRef.current.y) / oldZoom
 
-    zoomAnchorRef.current = {
-      x: cursorX,
-      y: cursorY,
-      worldX,
-      worldY,
-      active: true,
-    }
-    zoomTargetRef.current = nextZoom
+    const candidateX = cursorX - worldX * nextZoom
+    const candidateY = cursorY - worldY * nextZoom
 
-    scheduleZoomAnimation()
-  }, [scheduleZoomAnimation])
+    const bounded = clampCameraToWorld(
+      candidateX,
+      candidateY,
+      nextZoom,
+      viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
+    )
+
+    cameraRef.current.x = bounded.x
+    cameraRef.current.y = bounded.y
+    zoomRef.current = nextZoom
+    zoomTargetRef.current = nextZoom
+    zoomAnchorRef.current.active = false
+
+    applyCamera()
+  }, [applyCamera, stopZoomAnimation, coverLayout, bgTexture])
 
   const parseSizeToSmallTiles = useCallback((size: string): number => {
     const match = size.match(/(\d+(?:\.\d+)?)/)
@@ -660,12 +656,20 @@ useEffect(() => {
       applyCamera()
     }
 
+    const wrapper = wrapperRef.current
+    if (wrapper) {
+      wrapper.addEventListener('wheel', handleWheel, { passive: false })
+    }
+
     window.addEventListener('resize', onResize)
     return () => {
       stopZoomAnimation()
       window.removeEventListener('resize', onResize)
+      if (wrapper) {
+        wrapper.removeEventListener('wheel', handleWheel)
+      }
     }
-  }, [applyCamera, centerWorld, stopZoomAnimation])
+  }, [applyCamera, centerWorld, stopZoomAnimation, handleWheel, coverLayout, bgTexture])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -768,7 +772,7 @@ useEffect(() => {
 
   return (
     <div
-      onWheel={handleWheel}
+      ref={wrapperRef}
       style={{ width: '100vw', height: '100vh', overflow: 'hidden', touchAction: 'none', position: 'relative' }}
     >
       <Application
@@ -850,33 +854,6 @@ useEffect(() => {
           <button type="button" onClick={zoomOut} style={buttonStyle}>
             -
           </button>
-        </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '40px 40px 40px',
-            gap: 8,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          <div />
-          <button type="button" onClick={() => moveCamera(0, PAN_STEP)} style={buttonStyle}>
-            ↑
-          </button>
-          <div />
-          <button type="button" onClick={() => moveCamera(PAN_STEP, 0)} style={buttonStyle}>
-            ←
-          </button>
-          <div style={{ width: 40, height: 40 }} />
-          <button type="button" onClick={() => moveCamera(-PAN_STEP, 0)} style={buttonStyle}>
-            →
-          </button>
-          <div />
-          <button type="button" onClick={() => moveCamera(0, -PAN_STEP)} style={buttonStyle}>
-            ↓
-          </button>
-          <div />
         </div>
       </div>
     </div>
