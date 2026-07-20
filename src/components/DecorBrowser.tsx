@@ -61,7 +61,6 @@ export function DecorBrowser({
   const [selectedCategory, setSelectedCategory] = useState('')
   const [search, setSearch] = useState('')
 
-
   const categoryItems = useMemo(() => {
     return categories.map((category) => {
       const decorations = items.filter(
@@ -83,9 +82,17 @@ export function DecorBrowser({
       return categoryItems
     }
 
-    return categoryItems.filter((category) =>
-      category.name.toLowerCase().includes(search.toLowerCase()),
-    )
+    const lowerSearch = search.toLowerCase()
+
+    return categoryItems.filter((category) => {
+      const themeMatch = category.name.toLowerCase().includes(lowerSearch)
+      const decorationMatch = items.some((item) =>
+        item.theme === category.name &&
+        item.name.toLowerCase().includes(lowerSearch),
+      )
+
+      return themeMatch || decorationMatch
+    })
   }, [categoryItems, search])
 
 
@@ -193,7 +200,17 @@ export function DecorBrowser({
                         boxShadow: '0 16px 40px rgba(56, 189, 248, 0.12)',
                         bg: surfaceHoverBg,
                       }}
-                      onClick={() => setSelectedCategory(category.name)}
+                      onClick={() => {
+                        const isExactCategorySearch =
+                          search.trim().toLowerCase() ===
+                          category.name.toLowerCase()
+
+                        setSelectedCategory(category.name)
+
+                        if (isExactCategorySearch) {
+                          setSearch('')
+                        }
+                      }}
                     >
                       <Box
                         flex="1"
