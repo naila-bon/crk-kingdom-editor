@@ -1,6 +1,6 @@
 //pixiCanvas.tsx
 import { Application, extend } from '@pixi/react'
-import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Assets,
   Container,
@@ -32,6 +32,7 @@ const ZOOM_SMOOTHING = 0.2
 const ZOOM_EPSILON = 0.001
 
 const CLICK_MOVE_THRESHOLD = 10
+const ZOOM_BUTTON_STEP = 0.15
 
 const IMG_ANCHOR_PX = { x: 2160, y: 695 }
 
@@ -64,12 +65,28 @@ const getViewportSize = (): Viewport => ({
   height: typeof window !== 'undefined' ? window.innerHeight : 0,
 })
 
-const getContentBounds = (viewport: Viewport): Bounds => ({
-  minX: 0,
-  maxX: viewport.width,
-  minY: 0,
-  maxY: viewport.height,
-})
+const getContentBounds = (viewport: Viewport, layout?: CoverLayout, tex?: Texture): Bounds => {
+  if (layout && tex) {
+    const contentWidth = tex.width * layout.scale
+    const contentHeight = tex.height * layout.scale
+    const contentMinX = layout.centerX - contentWidth / 2
+    const contentMinY = layout.centerY - contentHeight / 2
+
+    return {
+      minX: contentMinX,
+      maxX: contentMinX + contentWidth,
+      minY: contentMinY,
+      maxY: contentMinY + contentHeight,
+    }
+  }
+
+  return {
+    minX: 0,
+    maxX: viewport.width,
+    minY: 0,
+    maxY: viewport.height,
+  }
+}
 
 const getZoomLimits = (): { minZoom: number; maxZoom: number } => ({
   minZoom: MIN_ZOOM,
@@ -81,33 +98,22 @@ const clampCameraToWorld = (
   y: number,
   zoom: number,
   viewport: Viewport,
+  layout?: CoverLayout,
+  tex?: Texture,
 ): { x: number; y: number } => {
-  const bounds = getContentBounds(viewport)
-  const scaledContentMinX = bounds.minX * zoom
-  const scaledContentMaxX = bounds.maxX * zoom
-  const scaledContentMinY = bounds.minY * zoom
-  const scaledContentMaxY = bounds.maxY * zoom
-  const scaledContentWidth = scaledContentMaxX - scaledContentMinX
-  const scaledContentHeight = scaledContentMaxY - scaledContentMinY
+  const bounds = getContentBounds(viewport, layout, tex)
+  const scaledMinX = bounds.minX * zoom
+  const scaledMaxX = bounds.maxX * zoom
+  const scaledMinY = bounds.minY * zoom
+  const scaledMaxY = bounds.maxY * zoom
 
-  let boundedX = x
-  let boundedY = y
+  const minCameraX = viewport.width - scaledMaxX
+  const maxCameraX = -scaledMinX
+  const minCameraY = viewport.height - scaledMaxY
+  const maxCameraY = -scaledMinY
 
-  if (scaledContentWidth <= viewport.width) {
-    boundedX = (viewport.width - (scaledContentMinX + scaledContentMaxX)) / 2
-  } else {
-    const minX = viewport.width - scaledContentMaxX
-    const maxX = -scaledContentMinX
-    boundedX = clamp(x, minX, maxX)
-  }
-
-  if (scaledContentHeight <= viewport.height) {
-    boundedY = (viewport.height - (scaledContentMinY + scaledContentMaxY)) / 2
-  } else {
-    const minY = viewport.height - scaledContentMaxY
-    const maxY = -scaledContentMinY
-    boundedY = clamp(y, minY, maxY)
-  }
+  const boundedX = minCameraX > maxCameraX ? (minCameraX + maxCameraX) / 2 : clamp(x, minCameraX, maxCameraX)
+  const boundedY = minCameraY > maxCameraY ? (minCameraY + maxCameraY) / 2 : clamp(y, minCameraY, maxCameraY)
 
   return { x: boundedX, y: boundedY }
 }
@@ -137,9 +143,10 @@ type PixiCanvasProps = {
     canUndo: boolean
     canRedo: boolean
   }) => void
+  onZoomControlsReady?: (controls: { zoomIn: () => void; zoomOut: () => void }) => void
 }
 
-export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange }: PixiCanvasProps) => {
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -153,6 +160,7 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryC
   const [isDragging, setIsDragging] = useState(false)
   const [viewportSize, setViewportSize] = useState<Viewport>(viewportRef.current)
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
 
 const {
   state: placedDecorations,
@@ -199,12 +207,57 @@ useEffect(() => {
     [],
   )
 
+  const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
+
+  const { smallScale, smallTileWidth, smallTileHeight } = coverLayout
+    ? getSmallTileGeometry(coverLayout.scale)
+    : { smallScale: 0, smallTileWidth: 0, smallTileHeight: 0 }
+
   const applyCamera = useCallback(() => {
     if (containerRef.current) {
       containerRef.current.position.set(cameraRef.current.x, cameraRef.current.y)
       containerRef.current.scale.set(zoomRef.current)
     }
   }, [])
+
+  const clampZoom = useCallback((zoom: number) => {
+    const zoomLimits = getZoomLimits()
+    return clamp(zoom, zoomLimits.minZoom, zoomLimits.maxZoom)
+  }, [])
+
+  const setCamera = useCallback((x: number, y: number, zoom = zoomRef.current) => {
+    cameraRef.current.x = x
+    cameraRef.current.y = y
+    zoomRef.current = clampZoom(zoom)
+    zoomTargetRef.current = zoomRef.current
+    applyCamera()
+  }, [applyCamera, clampZoom])
+
+  const getViewportCenterWorld = useCallback(() => {
+    const centerX = viewportRef.current.width / 2
+    const centerY = viewportRef.current.height / 2
+    return {
+      centerX,
+      centerY,
+      worldX: (centerX - cameraRef.current.x) / zoomRef.current,
+      worldY: (centerY - cameraRef.current.y) / zoomRef.current,
+    }
+  }, [])
+
+  const buttonStyle = {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    border: '1px solid rgba(255,255,255,0.75)',
+    background: 'rgba(0,0,0,0.65)',
+    color: 'white',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 18,
+    padding: 0,
+  }
 
   const stopZoomAnimation = useCallback(() => {
     if (zoomAnimationFrameRef.current !== null) {
@@ -239,6 +292,8 @@ useEffect(() => {
       candidateY,
       zoomRef.current,
       viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
     )
 
     cameraRef.current.x = bounded.x
@@ -257,6 +312,8 @@ useEffect(() => {
           : cameraRef.current.y,
         zoomRef.current,
         viewportRef.current,
+        coverLayout ?? undefined,
+        bgTexture ?? undefined,
       )
       cameraRef.current.x = finalBounded.x
       cameraRef.current.y = finalBounded.y
@@ -273,6 +330,31 @@ useEffect(() => {
     zoomAnimationFrameRef.current = window.requestAnimationFrame(animateZoom)
   }, [animateZoom])
 
+  const zoomTo = useCallback((nextZoom: number) => {
+    const targetZoom = clampZoom(nextZoom)
+    if (targetZoom === zoomRef.current && targetZoom === zoomTargetRef.current) {
+      return
+    }
+
+    const { centerX, centerY, worldX, worldY } = getViewportCenterWorld()
+    zoomAnchorRef.current = {
+      x: centerX,
+      y: centerY,
+      worldX,
+      worldY,
+      active: true,
+    }
+    zoomTargetRef.current = targetZoom
+    scheduleZoomAnimation()
+  }, [clampZoom, getViewportCenterWorld, scheduleZoomAnimation])
+
+  const zoomIn = useCallback(() => zoomTo(zoomRef.current + ZOOM_BUTTON_STEP), [zoomTo])
+  const zoomOut = useCallback(() => zoomTo(zoomRef.current - ZOOM_BUTTON_STEP), [zoomTo])
+
+  useEffect(() => {
+    onZoomControlsReady?.({ zoomIn, zoomOut })
+  }, [onZoomControlsReady, zoomIn, zoomOut])
+
   const centerWorld = useCallback(() => {
     const centerX = viewportRef.current.width / 2
     const centerY = viewportRef.current.height / 2
@@ -287,21 +369,27 @@ useEffect(() => {
     zoomRef.current = clamp(zoomRef.current, zoomLimits.minZoom, zoomLimits.maxZoom)
     zoomTargetRef.current = zoomRef.current
 
-    const centeredX = centerX - (viewportRef.current.width / 2) * zoomRef.current
-    const centeredY = centerY - (viewportRef.current.height / 2) * zoomRef.current
+    const centeredX = coverLayout
+      ? centerX - coverLayout.centerX * zoomRef.current
+      : centerX - (viewportRef.current.width / 2) * zoomRef.current
+    const centeredY = coverLayout
+      ? centerY - coverLayout.centerY * zoomRef.current
+      : centerY - (viewportRef.current.height / 2) * zoomRef.current
 
     const bounded = clampCameraToWorld(
       centeredX,
       centeredY,
       zoomRef.current,
       viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
     )
 
     cameraRef.current.x = bounded.x
     cameraRef.current.y = bounded.y
 
     applyCamera()
-  }, [applyCamera])
+  }, [applyCamera, bgTexture, coverLayout])
 
   const setContainer = useCallback((node: Container | null) => {
     containerRef.current = node
@@ -312,38 +400,42 @@ useEffect(() => {
     }
   }, [centerWorld])
 
-  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+  const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault()
+    stopZoomAnimation()
 
     const zoomLimits = getZoomLimits()
     const oldZoom = zoomRef.current
     const zoomFactor = Math.exp(-event.deltaY * ZOOM_SENSITIVITY)
-    const nextZoom = clamp(zoomTargetRef.current * zoomFactor, zoomLimits.minZoom, zoomLimits.maxZoom)
+    const nextZoom = clamp(zoomRef.current * zoomFactor, zoomLimits.minZoom, zoomLimits.maxZoom)
 
-    if (nextZoom === zoomTargetRef.current) return
+    if (nextZoom === zoomRef.current) return
 
     const cursorX = event.clientX
     const cursorY = event.clientY
     const worldX = (cursorX - cameraRef.current.x) / oldZoom
     const worldY = (cursorY - cameraRef.current.y) / oldZoom
 
-    zoomAnchorRef.current = {
-      x: cursorX,
-      y: cursorY,
-      worldX,
-      worldY,
-      active: true,
-    }
+    const candidateX = cursorX - worldX * nextZoom
+    const candidateY = cursorY - worldY * nextZoom
+
+    const bounded = clampCameraToWorld(
+      candidateX,
+      candidateY,
+      nextZoom,
+      viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
+    )
+
+    cameraRef.current.x = bounded.x
+    cameraRef.current.y = bounded.y
+    zoomRef.current = nextZoom
     zoomTargetRef.current = nextZoom
+    zoomAnchorRef.current.active = false
 
-    scheduleZoomAnimation()
-  }, [scheduleZoomAnimation])
-
-  const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
-
-  const { smallScale, smallTileWidth, smallTileHeight } = coverLayout
-    ? getSmallTileGeometry(coverLayout.scale)
-    : { smallScale: 0, smallTileWidth: 0, smallTileHeight: 0 }
+    applyCamera()
+  }, [applyCamera, stopZoomAnimation, coverLayout, bgTexture])
 
   const parseSizeToSmallTiles = useCallback((size: string): number => {
     const match = size.match(/(\d+(?:\.\d+)?)/)
@@ -497,6 +589,8 @@ useEffect(() => {
       candidateY,
       zoomRef.current,
       viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
     )
 
     cameraRef.current.x = bounded.x
@@ -557,6 +651,8 @@ useEffect(() => {
         candidateY,
         zoomRef.current,
         viewportRef.current,
+        coverLayout ?? undefined,
+        bgTexture ?? undefined,
       )
 
       cameraRef.current.x = bounded.x
@@ -565,12 +661,20 @@ useEffect(() => {
       applyCamera()
     }
 
+    const wrapper = wrapperRef.current
+    if (wrapper) {
+      wrapper.addEventListener('wheel', handleWheel, { passive: false })
+    }
+
     window.addEventListener('resize', onResize)
     return () => {
       stopZoomAnimation()
       window.removeEventListener('resize', onResize)
+      if (wrapper) {
+        wrapper.removeEventListener('wheel', handleWheel)
+      }
     }
-  }, [applyCamera, centerWorld, stopZoomAnimation])
+  }, [applyCamera, centerWorld, stopZoomAnimation, handleWheel, coverLayout, bgTexture])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -592,6 +696,71 @@ useEffect(() => {
         return
       }
 
+      const panStep = 40
+      const zoomStep = 0.1
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        const bounded = clampCameraToWorld(
+      cameraRef.current.x,
+      cameraRef.current.y + panStep,
+      zoomRef.current,
+      viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
+    )
+        setCamera(bounded.x, bounded.y)
+        return
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        const bounded = clampCameraToWorld(
+      cameraRef.current.x,
+      cameraRef.current.y - panStep,
+      zoomRef.current,
+      viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
+    )
+        setCamera(bounded.x, bounded.y)
+        return
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        const bounded = clampCameraToWorld(
+      cameraRef.current.x + panStep,
+      cameraRef.current.y,
+      zoomRef.current,
+      viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
+    )
+        setCamera(bounded.x, bounded.y)
+        return
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        const bounded = clampCameraToWorld(
+      cameraRef.current.x - panStep,
+      cameraRef.current.y,
+      zoomRef.current,
+      viewportRef.current,
+      coverLayout ?? undefined,
+      bgTexture ?? undefined,
+    )
+        setCamera(bounded.x, bounded.y)
+        return
+      }
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault()
+        setCamera(cameraRef.current.x, cameraRef.current.y, clampZoom(zoomRef.current + zoomStep))
+        return
+      }
+      if (event.key === '-') {
+        event.preventDefault()
+        setCamera(cameraRef.current.x, cameraRef.current.y, clampZoom(zoomRef.current - zoomStep))
+        return
+      }
+
       if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPlacedId) {
         commitPlacedDecorations((prev) => prev.filter((d) => d.id !== selectedPlacedId))
         setSelectedPlacedId(null)
@@ -608,7 +777,7 @@ useEffect(() => {
 
   return (
     <div
-      onWheel={handleWheel}
+      ref={wrapperRef}
       style={{ width: '100vw', height: '100vh', overflow: 'hidden', touchAction: 'none', position: 'relative' }}
     >
       <Application
@@ -671,6 +840,21 @@ useEffect(() => {
           )}
         </pixiContainer>
       </Application>
+      <div
+        style={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          zIndex: 10,
+          pointerEvents: 'auto',
+        }}
+      >
+        <div style={{ display: 'flex', gap: 8 }}>
+        </div>
+      </div>
     </div>
   )
 }

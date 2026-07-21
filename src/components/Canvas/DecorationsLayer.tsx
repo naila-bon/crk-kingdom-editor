@@ -1,5 +1,5 @@
 import { Assets, Texture, type FederatedPointerEvent } from 'pixi.js'
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { Fragment, useEffect, useMemo, useState, type FC } from 'react'
 import { isoToScreen } from '../../utils/gridUtils'
 import { getVisibleBottomFraction } from '../../utils/textureBounds'
 import decorations from '../../../scripts/crk_decors_avec_noms_843.json'
@@ -133,9 +133,8 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
         const deleteButtonY = spriteTop - DELETE_BUTTON_MARGIN
 
         return (
-          <>
+          <Fragment key={deco.id}>
             <pixiSprite
-              key={deco.id}
               texture={texture}
               x={x}
               y={y}
@@ -214,7 +213,7 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
                 }}
               />
             )}
-          </>
+          </Fragment>
         )
       })}
     </>
