@@ -92,7 +92,7 @@ function App() {
         border="1px solid"
         borderColor="whiteAlpha.300"
       >
-        {/* {selectedDecoration ? (
+        {selectedDecoration ? (
           <Text color="white" fontSize="sm" fontWeight="medium">
             Placing <Text as="span" color="cyan.300" fontWeight="bold">{selectedDecoration.name}</Text> — click the grid to place it, press{' '}
             <Text as="span" color="yellow.300" fontWeight="bold">Esc</Text> to stop
@@ -101,7 +101,7 @@ function App() {
           <Text color="white" fontSize="sm" fontWeight="medium">
             Click a decor in the panel to select it, or click a placed decor on the grid to move or delete it
           </Text>
-        )} */}
+        )}
       </Box>
 
       <Box position="absolute" left={4} bottom={16} zIndex={3} pointerEvents="auto" display="flex" flexDirection="column" gap={2}>
