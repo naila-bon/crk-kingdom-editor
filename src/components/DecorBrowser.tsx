@@ -126,7 +126,7 @@ export function DecorBrowser({
       h="full"
       position="relative"
       color="white"
-      p={3}
+      p={4}
       overflow="hidden"
       bg={panelBg}
       display="flex"
@@ -141,7 +141,7 @@ export function DecorBrowser({
               placeholder={
                 selectedCategory
                   ? 'Search within collection…'
-                  : 'Search for a theme…'
+                  : 'Search for a theme or decoration by name…'
               }
               bg={surfaceBg}
               border="1px solid"
@@ -153,7 +153,7 @@ export function DecorBrowser({
             />
             {onClose && (
               <Box top={3} right={3} zIndex={3} pointerEvents="auto">
-                <IconButton aria-label="Close" size="sm" onClick={onClose}>
+                <IconButton rounded={100} aria-label="Close" size="sm" onClick={onClose}>
                   <EyeClosed size={18} />
                 </IconButton>
               </Box>

@@ -4,6 +4,7 @@ import { DecorBrowser } from './components/DecorBrowser'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
 import layoutImage from 'src/assets/crk_layout/crk_layout.png'
 import { Eye, Plus, Minus, Undo2, Redo2 } from 'lucide-react'
+import { HelpDialog } from './components/HelpDialog'
 
 type Decoration = {
   name: string
@@ -76,33 +77,32 @@ function App() {
           <Redo2 />
         </IconButton>
       </Box>
-      {/* Status banner, top center — reflects current mode. */}
-      <Box
-        position="absolute"
-        top={4}
-        left="50%"
-        transform="translateX(-50%)"
-        zIndex={3}
-        pointerEvents="none"
-        textAlign="center"
-        px={4}
-        py={2}
-        rounded="full"
-        bg="blackAlpha.700"
-        border="1px solid"
-        borderColor="whiteAlpha.300"
-      >
-        {selectedDecoration ? (
-          <Text color="white" fontSize="sm" fontWeight="medium">
-            Placing <Text as="span" color="cyan.300" fontWeight="bold">{selectedDecoration.name}</Text> — click the grid to place it, press{' '}
-            <Text as="span" color="yellow.300" fontWeight="bold">Esc</Text> to stop
-          </Text>
-        ) : (
-          <Text color="white" fontSize="sm" fontWeight="medium">
-            Click a decor in the panel to select it, or click a placed decor on the grid to move or delete it
-          </Text>
-        )}
+      {/* Help button, top-right (avant la sidebar, ou ajuste selon ton layout) */}
+      <Box position="absolute" top={4} right={sidebarOpen ? 'calc(24rem + 16px)' : 16} zIndex={3} pointerEvents="auto">
+        <HelpDialog />
       </Box>
+
+      {/* Petit indicateur, seulement en mode placement */}
+      {selectedDecoration && (
+        <Box
+          position="absolute"
+          top={4}
+          left="50%"
+          transform="translateX(-50%)"
+          zIndex={3}
+          pointerEvents="none"
+          px={3}
+          py={1.5}
+          rounded="full"
+          bg="blackAlpha.700"
+          border="1px solid"
+          borderColor="whiteAlpha.300"
+        >
+          <Text color="white" fontSize="xs" fontWeight="medium">
+            Placing <Text as="span" color="cyan.300" fontWeight="bold">{selectedDecoration.name}</Text> — <Text as="span" color="yellow.300" fontWeight="bold">Esc</Text> to stop
+          </Text>
+        </Box>
+      )}
 
       <Box position="absolute" left={4} bottom={16} zIndex={3} pointerEvents="auto" display="flex" flexDirection="column" gap={2}>
         <IconButton
@@ -140,8 +140,8 @@ function App() {
             />
           </Box>
         ) : (
-          <Box position="absolute" top={3} right={3} zIndex={3} pointerEvents="auto">
-            <IconButton aria-label="Open" size="sm" onClick={() => setSidebarOpen(true)}>
+          <Box position="absolute" top={4} right={4} zIndex={4} pointerEvents="auto">
+            <IconButton  rounded={100} aria-label="Open" size="sm" onClick={() => setSidebarOpen(true)}>
               <Eye />
             </IconButton>
           </Box>
