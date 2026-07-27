@@ -176,7 +176,7 @@ export function DecorBrowser({
                 }}
               >
                 <SimpleGrid
-                  columns={{ base: 1, md: 2, xl: 3 }}
+                  columns={{ base: 2 }}
                   gap={4}
                 >
                   {filteredCategoryItems.map((category) => (
@@ -310,9 +310,7 @@ export function DecorBrowser({
 
                   <SimpleGrid
                     columns={{
-                      base: 1,
-                      md: 2,
-                      xl: 3,
+                      base: 2,
                     }}
                     gap={5}
                   >
