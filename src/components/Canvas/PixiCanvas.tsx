@@ -1,6 +1,6 @@
 //pixiCanvas.tsx
 import { Application, extend } from '@pixi/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Assets,
   Container,
@@ -210,8 +210,6 @@ useEffect(() => {
   const screenToGridCoords = useCallback(
     (globalX: number, globalY: number, offsetX: number, offsetY: number, scale: number) => {
       if (!containerRef.current) return null
-
-      // toLocal inverse la transform du container (position + scale de la caméra)
       const local = containerRef.current.toLocal(new Point(globalX, globalY))
 
       const dx = local.x - offsetX
@@ -227,7 +225,10 @@ useEffect(() => {
     [],
   )
 
-  const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
+  const coverLayout = useMemo(
+    () => (bgTexture ? getCoverLayout(viewportSize, bgTexture) : null),
+    [bgTexture, viewportSize],
+  )
 
   const { smallScale, smallTileWidth, smallTileHeight } = coverLayout
     ? getSmallTileGeometry(coverLayout.scale)
