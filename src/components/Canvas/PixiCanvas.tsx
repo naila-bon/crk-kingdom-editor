@@ -1,6 +1,6 @@
 //pixiCanvas.tsx
 import { Application, extend } from '@pixi/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Assets,
   Container,
@@ -18,6 +18,7 @@ import type { PlacedDecoration } from '../../types/decorations'
 import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, TINY_PER_SMALL } from '@/utils/gridUtils'
 import { HoverHighlight } from './HoverHighlight'
 import { useHistoryState } from '../../hooks/useHistoryState'
+import { useKingdomStore } from '../../store/kingdomStore'
 
 extend({
   Container,
@@ -162,6 +163,10 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryC
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
+const persistedItems = useKingdomStore((state) => state.items)
+const loadLayout = useKingdomStore((state) => state.loadLayout)
+const hasHydratedLayoutRef = useRef(false)
+
 const {
   state: placedDecorations,
   setLive: setPlacedDecorationsLive,
@@ -174,6 +179,21 @@ const {
   canUndo,
   canRedo,
 } = useHistoryState<PlacedDecoration[]>([])
+
+useEffect(() => {
+  if (hasHydratedLayoutRef.current) return
+
+  if (persistedItems.length > 0) {
+    setPlacedDecorationsLive(persistedItems)
+  }
+
+  hasHydratedLayoutRef.current = true
+}, [persistedItems, setPlacedDecorationsLive])
+
+useEffect(() => {
+  if (!hasHydratedLayoutRef.current) return
+  loadLayout(placedDecorations)
+}, [placedDecorations, loadLayout])
 
 useEffect(() => {
   onHistoryChange?.({ undo: undoDecorations, redo: redoDecorations, canUndo, canRedo })
@@ -190,8 +210,6 @@ useEffect(() => {
   const screenToGridCoords = useCallback(
     (globalX: number, globalY: number, offsetX: number, offsetY: number, scale: number) => {
       if (!containerRef.current) return null
-
-      // toLocal inverse la transform du container (position + scale de la caméra)
       const local = containerRef.current.toLocal(new Point(globalX, globalY))
 
       const dx = local.x - offsetX
@@ -207,7 +225,10 @@ useEffect(() => {
     [],
   )
 
-  const coverLayout = bgTexture ? getCoverLayout(viewportSize, bgTexture) : null
+  const coverLayout = useMemo(
+    () => (bgTexture ? getCoverLayout(viewportSize, bgTexture) : null),
+    [bgTexture, viewportSize],
+  )
 
   const { smallScale, smallTileWidth, smallTileHeight } = coverLayout
     ? getSmallTileGeometry(coverLayout.scale)
@@ -243,21 +264,6 @@ useEffect(() => {
       worldY: (centerY - cameraRef.current.y) / zoomRef.current,
     }
   }, [])
-
-  const buttonStyle = {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    border: '1px solid rgba(255,255,255,0.75)',
-    background: 'rgba(0,0,0,0.65)',
-    color: 'white',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 18,
-    padding: 0,
-  }
 
   const stopZoomAnimation = useCallback(() => {
     if (zoomAnimationFrameRef.current !== null) {
