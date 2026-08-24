@@ -2,7 +2,7 @@ import { Assets, Texture, type FederatedPointerEvent } from 'pixi.js'
 import { Fragment, useEffect, useMemo, useState, type FC } from 'react'
 import { isoToScreen } from '../../utils/gridUtils'
 import { getVisibleBottomFraction } from '../../utils/textureBounds'
-import decorations from '../../../scripts/crk_decors_avec_noms_843.json'
+import decorations from '../../../scripts/decorations.json'
 import type { PlacedDecoration } from '../../types/decorations'
 
 const decorationByName = new Map(
