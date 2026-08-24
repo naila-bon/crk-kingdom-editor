@@ -3,5 +3,6 @@ import tsconfigPaths from "vite-tsconfig-paths"
 import { defineConfig } from "vite"
 
 export default defineConfig({
+  base: "/crk-kingdom-editor/",
   plugins: [react(), tsconfigPaths()],
 })

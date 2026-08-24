@@ -11,7 +11,7 @@ import {
     VStack,
     HStack,
 } from '@chakra-ui/react'
-import { ExternalLink, HelpCircle, Users } from 'lucide-react'
+import { HelpCircle, Users } from 'lucide-react'
 import { useState } from 'react'
 import packageJson from '../../package.json'
 
