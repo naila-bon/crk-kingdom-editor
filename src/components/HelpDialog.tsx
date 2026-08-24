@@ -4,13 +4,16 @@ import {
     Button,
     CloseButton,
     Dialog,
+    Link,
     Kbd,
     Stack,
     Text,
     VStack,
+    HStack,
 } from '@chakra-ui/react'
-import { HelpCircle } from 'lucide-react'
+import { ExternalLink, HelpCircle, Users } from 'lucide-react'
 import { useState } from 'react'
+import packageJson from '../../package.json'
 
 type HelpSection = {
     title: string
@@ -61,7 +64,7 @@ const sections: HelpSection[] = [
             },
         ],
     },
-  
+
 ]
 
 export const HelpDialog = () => {
@@ -196,6 +199,25 @@ export const HelpDialog = () => {
                                     </Text>
 
                                 </Stack>
+                            </Box>
+                            <Box >
+
+                                <HStack gap={2} fontSize="sm" color="whiteAlpha.800/20" justifyContent="center" >
+                                    <Text>Version {packageJson.version}</Text>
+                                    <Link
+                                        href="https://github.com/naila-bon/crk-kingdom-editor/graphs/contributors"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        display="inline-flex"
+                                        alignItems="center"
+                                        gap={2}
+                                        color="whiteAlpha.800/20"
+                                        _hover={{ color: 'cyan.300' }}
+                                    >
+                                        <Users size={15} />
+                                        Contributors
+                                    </Link>
+                                </HStack>
                             </Box>
                         </VStack>
                     </Dialog.Body>
