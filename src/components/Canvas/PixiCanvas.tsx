@@ -20,8 +20,6 @@ import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, TINY_PER_SMALL } from '@
 import { HoverHighlight } from './HoverHighlight'
 import { useHistoryState } from '../../hooks/useHistoryState'
 import { useKingdomStore } from '../../store/kingdomStore'
-import { createLayoutSvg, downloadTextFile, getLayoutSvgFilename, parseLayoutSvg } from '../../utils/layoutSvg'
-import { downloadCanvasAsPng, getLayoutExportFilename } from '../../utils/exportLayout'
 import { downloadCanvasAsPng, getLayoutPngFilename } from '../../utils/exportLayout'
 import { createLayoutSvg, downloadTextFile, getLayoutSvgFilename, parseLayoutSvg } from '../../utils/layoutSvg'
 
@@ -151,11 +149,6 @@ type PixiCanvasProps = {
     canRedo: boolean
   }) => void
   onZoomControlsReady?: (controls: { zoomIn: () => void; zoomOut: () => void }) => void
-  onExportSvgReady?: (exportLayout: () => void) => void
-  onImportSvgReady?: (importLayout: (content: string) => void) => void
-}
-
-export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady, onExportSvgReady, onImportSvgReady }: PixiCanvasProps) => {
   onExportReady?: (exportLayout: () => Promise<void>) => void
   onExportSvgReady?: (exportLayout: () => void) => void
   onImportSvgReady?: (importLayout: (content: string) => void) => void
@@ -177,13 +170,14 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryC
   const zoomTargetRef = useRef(1)
   const zoomAnchorRef = useRef({ x: 0, y: 0, worldX: 0, worldY: 0, active: false })
   const zoomAnimationFrameRef = useRef<number | null>(null)
+  const animateZoomRef = useRef<() => void>(() => {})
   const viewportRef = useRef<Viewport>(getViewportSize())
   const dragRef = useRef({ active: false, x: 0, y: 0 })
   const pointerDownRef = useRef({ x: 0, y: 0 })
   const containerRef = useRef<Container | null>(null)
   const didInitCameraRef = useRef(false)
   const [isDragging, setIsDragging] = useState(false)
-  const [viewportSize, setViewportSize] = useState<Viewport>(viewportRef.current)
+  const [viewportSize, setViewportSize] = useState<Viewport>(getViewportSize)
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
   const [application, setApplication] = useState<PixiApplication | null>(null)
   const [isExporting, setIsExporting] = useState(false)
@@ -355,8 +349,12 @@ useEffect(() => {
       return
     }
 
-    zoomAnimationFrameRef.current = window.requestAnimationFrame(animateZoom)
+    zoomAnimationFrameRef.current = window.requestAnimationFrame(() => animateZoomRef.current())
   }, [applyCamera])
+
+  useEffect(() => {
+    animateZoomRef.current = animateZoom
+  }, [animateZoom])
 
   const scheduleZoomAnimation = useCallback(() => {
     if (zoomAnimationFrameRef.current !== null) return
@@ -384,26 +382,6 @@ useEffect(() => {
   const zoomIn = useCallback(() => zoomTo(zoomRef.current + ZOOM_BUTTON_STEP), [zoomTo])
   const zoomOut = useCallback(() => zoomTo(zoomRef.current - ZOOM_BUTTON_STEP), [zoomTo])
 
-  const exportSvg = useCallback(() => {
-    if (!bgTexture) return
-    const svg = createLayoutSvg(placedDecorations, layoutImg)
-    downloadTextFile(svg, getLayoutSvgFilename(), 'image/svg+xml')
-  }, [bgTexture, placedDecorations])
-
-  const importSvg = useCallback((content: string) => {
-    const items = parseLayoutSvg(content)
-    replaceDecorations(items)
-    setSelectedPlacedId(null)
-    onExitPlacementMode?.()
-  }, [onExitPlacementMode, replaceDecorations])
-
-  useEffect(() => {
-    onExportSvgReady?.(exportSvg)
-  }, [exportSvg, onExportSvgReady])
-
-  useEffect(() => {
-    onImportSvgReady?.(importSvg)
-  }, [importSvg, onImportSvgReady])
   const exportLayout = useCallback(async () => {
     const container = containerRef.current
     if (!application || !container || !coverLayout || !bgTexture) {
@@ -444,6 +422,7 @@ useEffect(() => {
   useEffect(() => {
     onExportReady?.(exportLayout)
   }, [exportLayout, onExportReady])
+
   const exportSvg = useCallback(() => {
     if (!bgTexture) return
     const svg = createLayoutSvg(placedDecorations, layoutImg)
