@@ -422,7 +422,6 @@ useEffect(() => {
   useEffect(() => {
     onExportReady?.(exportLayout)
   }, [exportLayout, onExportReady])
-
   const exportSvg = useCallback(() => {
     if (!bgTexture) return
     const svg = createLayoutSvg(placedDecorations, layoutImg)
