@@ -19,6 +19,7 @@ import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, TINY_PER_SMALL } from '@
 import { HoverHighlight } from './HoverHighlight'
 import { useHistoryState } from '../../hooks/useHistoryState'
 import { useKingdomStore } from '../../store/kingdomStore'
+import { createLayoutSvg, downloadTextFile, getLayoutSvgFilename, parseLayoutSvg } from '../../utils/layoutSvg'
 
 extend({
   Container,
@@ -145,9 +146,11 @@ type PixiCanvasProps = {
     canRedo: boolean
   }) => void
   onZoomControlsReady?: (controls: { zoomIn: () => void; zoomOut: () => void }) => void
+  onExportSvgReady?: (exportLayout: () => void) => void
+  onImportSvgReady?: (importLayout: (content: string) => void) => void
 }
 
-export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady }: PixiCanvasProps) => {
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady, onExportSvgReady, onImportSvgReady }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -174,6 +177,7 @@ const {
   beginInteraction: beginDecorInteraction,
   commitInteraction: commitDecorInteraction,
   cancelInteraction: cancelDecorInteraction,
+  replace: replaceDecorations,
   undo: undoDecorations,
   redo: redoDecorations,
   canUndo,
@@ -356,6 +360,27 @@ useEffect(() => {
 
   const zoomIn = useCallback(() => zoomTo(zoomRef.current + ZOOM_BUTTON_STEP), [zoomTo])
   const zoomOut = useCallback(() => zoomTo(zoomRef.current - ZOOM_BUTTON_STEP), [zoomTo])
+
+  const exportSvg = useCallback(() => {
+    if (!bgTexture) return
+    const svg = createLayoutSvg(placedDecorations, layoutImg)
+    downloadTextFile(svg, getLayoutSvgFilename(), 'image/svg+xml')
+  }, [bgTexture, placedDecorations])
+
+  const importSvg = useCallback((content: string) => {
+    const items = parseLayoutSvg(content)
+    replaceDecorations(items)
+    setSelectedPlacedId(null)
+    onExitPlacementMode?.()
+  }, [onExitPlacementMode, replaceDecorations])
+
+  useEffect(() => {
+    onExportSvgReady?.(exportSvg)
+  }, [exportSvg, onExportSvgReady])
+
+  useEffect(() => {
+    onImportSvgReady?.(importSvg)
+  }, [importSvg, onImportSvgReady])
 
   useEffect(() => {
     onZoomControlsReady?.({ zoomIn, zoomOut })

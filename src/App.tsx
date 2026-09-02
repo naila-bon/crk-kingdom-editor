@@ -1,9 +1,9 @@
 import { Box, IconButton, Text } from '@chakra-ui/react'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
 import layoutImage from 'src/assets/crk_layout/crk_layout.png'
-import { Eye, Plus, Minus, Undo2, Redo2 } from 'lucide-react'
+import { Download, Eye, FileUp, Plus, Minus, Undo2, Redo2 } from 'lucide-react'
 import { HelpDialog } from './components/HelpDialog'
 
 type Decoration = {
@@ -28,9 +28,21 @@ function App() {
   const [selectedDecoration, setSelectedDecoration] = useState<Decoration | null>(null)
   const [history, setHistory] = useState<HistoryInfo | null>(null)
   const [zoomControls, setZoomControls] = useState<{ zoomIn: () => void; zoomOut: () => void } | null>(null)
+  const [exportSvg, setExportSvg] = useState<(() => void) | null>(null)
+  const [importSvg, setImportSvg] = useState<((content: string) => void) | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
 
   const handleHistoryChange = useCallback((info: HistoryInfo) => {
     setHistory(info)
+  }, [])
+
+  const handleExportSvgReady = useCallback((exporter: () => void) => {
+    setExportSvg(() => exporter)
+  }, [])
+
+  const handleImportSvgReady = useCallback((importer: (content: string) => void) => {
+    setImportSvg(() => importer)
   }, [])
   return (
     <Box
@@ -55,6 +67,8 @@ function App() {
           onExitPlacementMode={() => setSelectedDecoration(null)}
           onHistoryChange={handleHistoryChange}
           onZoomControlsReady={setZoomControls}
+          onExportSvgReady={handleExportSvgReady}
+          onImportSvgReady={handleImportSvgReady}
         />
       </Box>
   {/* Undo / Redo controls, top-left */}
@@ -76,7 +90,41 @@ function App() {
         >
           <Redo2 />
         </IconButton>
+        <IconButton aria-label="Export layout as SVG" size="sm" onClick={() => exportSvg?.()} disabled={!exportSvg}>
+          <Download />
+        </IconButton>
+        <IconButton
+          aria-label="Import layout from SVG"
+          size="sm"
+          onClick={() => importInputRef.current?.click()}
+          disabled={!importSvg}
+        >
+          <FileUp />
+        </IconButton>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".svg,image/svg+xml"
+          hidden
+          onChange={async (event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            if (!file || !importSvg) return
+
+            try {
+              setImportError(null)
+              importSvg(await file.text())
+            } catch (error) {
+              setImportError(error instanceof Error ? error.message : 'Impossible d’importer ce fichier SVG.')
+            }
+          }}
+        />
       </Box>
+      {importError && (
+        <Text position="absolute" top={16} left={4} zIndex={3} color="red.200" fontSize="sm">
+          {importError}
+        </Text>
+      )}
       {/* Help button, top-right (avant la sidebar, ou ajuste selon ton layout) */}
       <Box position="absolute" top={4} right={sidebarOpen ? 'calc(24rem + 16px)' : 16} zIndex={3} pointerEvents="auto">
         <HelpDialog />
