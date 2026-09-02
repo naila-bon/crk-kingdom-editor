@@ -30,7 +30,7 @@ export const downloadCanvasAsPng = async (canvas: ExportCanvas, filename: string
   URL.revokeObjectURL(url)
 }
 
-export const getLayoutExportFilename = (): string => {
+export const getLayoutPngFilename = (): string => {
   const date = new Date().toISOString().slice(0, 10)
   return `crk-kingdom-layout-${date}.png`
 }

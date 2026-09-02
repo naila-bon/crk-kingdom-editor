@@ -22,6 +22,8 @@ import { useHistoryState } from '../../hooks/useHistoryState'
 import { useKingdomStore } from '../../store/kingdomStore'
 import { createLayoutSvg, downloadTextFile, getLayoutSvgFilename, parseLayoutSvg } from '../../utils/layoutSvg'
 import { downloadCanvasAsPng, getLayoutExportFilename } from '../../utils/exportLayout'
+import { downloadCanvasAsPng, getLayoutPngFilename } from '../../utils/exportLayout'
+import { createLayoutSvg, downloadTextFile, getLayoutSvgFilename, parseLayoutSvg } from '../../utils/layoutSvg'
 
 extend({
   Container,
@@ -155,6 +157,8 @@ type PixiCanvasProps = {
 
 export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady, onExportSvgReady, onImportSvgReady }: PixiCanvasProps) => {
   onExportReady?: (exportLayout: () => Promise<void>) => void
+  onExportSvgReady?: (exportLayout: () => void) => void
+  onImportSvgReady?: (importLayout: (content: string) => void) => void
 }
 
 const ApplicationBridge = ({ onReady }: { onReady: (app: PixiApplication) => void }) => {
@@ -167,7 +171,7 @@ const ApplicationBridge = ({ onReady }: { onReady: (app: PixiApplication) => voi
   return null
 }
 
-export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady, onExportReady }: PixiCanvasProps) => {
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady, onExportReady, onExportSvgReady, onImportSvgReady }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -429,7 +433,7 @@ useEffect(() => {
         antialias: true,
       })
 
-      await downloadCanvasAsPng(canvas, getLayoutExportFilename())
+      await downloadCanvasAsPng(canvas, getLayoutPngFilename())
     } finally {
       container.position.set(previousX, previousY)
       container.scale.set(previousScaleX, previousScaleY)
@@ -440,6 +444,26 @@ useEffect(() => {
   useEffect(() => {
     onExportReady?.(exportLayout)
   }, [exportLayout, onExportReady])
+  const exportSvg = useCallback(() => {
+    if (!bgTexture) return
+    const svg = createLayoutSvg(placedDecorations, layoutImg)
+    downloadTextFile(svg, getLayoutSvgFilename(), 'image/svg+xml')
+  }, [bgTexture, placedDecorations])
+
+  const importSvg = useCallback((content: string) => {
+    const items = parseLayoutSvg(content)
+    replaceDecorations(items)
+    setSelectedPlacedId(null)
+    onExitPlacementMode?.()
+  }, [onExitPlacementMode, replaceDecorations])
+
+  useEffect(() => {
+    onExportSvgReady?.(exportSvg)
+  }, [exportSvg, onExportSvgReady])
+
+  useEffect(() => {
+    onImportSvgReady?.(importSvg)
+  }, [importSvg, onImportSvgReady])
 
   useEffect(() => {
     onZoomControlsReady?.({ zoomIn, zoomOut })

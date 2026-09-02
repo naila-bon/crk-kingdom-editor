@@ -1,4 +1,5 @@
 import { Box, IconButton, Text } from '@chakra-ui/react'
+import { Box, Button, IconButton, Text } from '@chakra-ui/react'
 import { useCallback, useRef, useState } from 'react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
@@ -28,6 +29,8 @@ function App() {
   const [selectedDecoration, setSelectedDecoration] = useState<Decoration | null>(null)
   const [history, setHistory] = useState<HistoryInfo | null>(null)
   const [zoomControls, setZoomControls] = useState<{ zoomIn: () => void; zoomOut: () => void } | null>(null)
+  const [exportPng, setExportPng] = useState<(() => Promise<void>) | null>(null)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exportSvg, setExportSvg] = useState<(() => void) | null>(null)
   const [importSvg, setImportSvg] = useState<((content: string) => void) | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
@@ -46,7 +49,15 @@ function App() {
   const handleImportSvgReady = useCallback((importer: (content: string) => void) => {
     setImportSvg(() => importer)
   const handleExportReady = useCallback((exporter: () => Promise<void>) => {
-    setExportLayout(() => exporter)
+    setExportPng((previous) => (previous === exporter ? previous : () => exporter()))
+  }, [])
+
+  const handleExportSvgReady = useCallback((exporter: () => void) => {
+    setExportSvg((previous) => (previous === exporter ? previous : () => exporter()))
+  }, [])
+
+  const handleImportSvgReady = useCallback((importer: (content: string) => void) => {
+    setImportSvg(() => importer)
   }, [])
   return (
     <Box
@@ -74,6 +85,8 @@ function App() {
           onExportSvgReady={handleExportSvgReady}
           onImportSvgReady={handleImportSvgReady}
           onExportReady={handleExportReady}
+          onExportSvgReady={handleExportSvgReady}
+          onImportSvgReady={handleImportSvgReady}
         />
       </Box>
   {/* Undo / Redo controls, top-left */}
@@ -138,9 +151,86 @@ function App() {
           }}
           disabled={!exportLayout || isExporting}
         >
+        <IconButton aria-label="Choose export format" size="sm" onClick={() => setExportDialogOpen(true)} disabled={!exportPng && !exportSvg}>
           <Download />
         </IconButton>
+        <IconButton
+          aria-label="Import layout from SVG"
+          size="sm"
+          onClick={() => importInputRef.current?.click()}
+          disabled={!importSvg}
+        >
+          <FileUp />
+        </IconButton>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".svg,image/svg+xml"
+          hidden
+          onChange={async (event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            if (!file || !importSvg) return
+
+            try {
+              setImportError(null)
+              importSvg(await file.text())
+            } catch (error) {
+              setImportError(error instanceof Error ? error.message : 'Impossible d’importer ce fichier SVG.')
+            }
+          }}
+        />
       </Box>
+      {exportDialogOpen && (
+        <Box
+          position="fixed"
+          inset={0}
+          zIndex={20}
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          bg="blackAlpha.700"
+          onClick={() => setExportDialogOpen(false)}
+        >
+          <Box
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-dialog-title"
+            bg="gray.800"
+            color="white"
+            p={6}
+            rounded="lg"
+            minW={{ base: 'calc(100% - 32px)', sm: '360px' }}
+            boxShadow="2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Text id="export-dialog-title" fontSize="lg" fontWeight="bold" mb={4}>
+              Export layout
+            </Text>
+            <Box display="flex" gap={3} justifyContent="flex-end">
+              <Button onClick={() => setExportDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={async () => {
+                  setExportDialogOpen(false)
+                  await exportPng?.()
+                }}
+                disabled={!exportPng}
+              >
+                PNG
+              </Button>
+              <Button
+                onClick={() => {
+                  setExportDialogOpen(false)
+                  exportSvg?.()
+                }}
+                disabled={!exportSvg}
+              >
+                SVG
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      )}
       {importError && (
         <Text position="absolute" top={16} left={4} zIndex={3} color="red.200" fontSize="sm">
           {importError}
