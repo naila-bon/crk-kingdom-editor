@@ -32,6 +32,8 @@ function App() {
   const [importSvg, setImportSvg] = useState<((content: string) => void) | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
+  const [exportLayout, setExportLayout] = useState<(() => Promise<void>) | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
 
   const handleHistoryChange = useCallback((info: HistoryInfo) => {
     setHistory(info)
@@ -43,6 +45,8 @@ function App() {
 
   const handleImportSvgReady = useCallback((importer: (content: string) => void) => {
     setImportSvg(() => importer)
+  const handleExportReady = useCallback((exporter: () => Promise<void>) => {
+    setExportLayout(() => exporter)
   }, [])
   return (
     <Box
@@ -69,6 +73,7 @@ function App() {
           onZoomControlsReady={setZoomControls}
           onExportSvgReady={handleExportSvgReady}
           onImportSvgReady={handleImportSvgReady}
+          onExportReady={handleExportReady}
         />
       </Box>
   {/* Undo / Redo controls, top-left */}
@@ -119,6 +124,22 @@ function App() {
             }
           }}
         />
+        <IconButton
+          aria-label="Export layout as PNG"
+          size="sm"
+          onClick={async () => {
+            if (!exportLayout) return
+            setIsExporting(true)
+            try {
+              await exportLayout()
+            } finally {
+              setIsExporting(false)
+            }
+          }}
+          disabled={!exportLayout || isExporting}
+        >
+          <Download />
+        </IconButton>
       </Box>
       {importError && (
         <Text position="absolute" top={16} left={4} zIndex={3} color="red.200" fontSize="sm">
