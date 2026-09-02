@@ -27,7 +27,17 @@ export const ExportDialog = ({
     <Dialog.Root open={open} onOpenChange={(details) => onOpenChange(details.open)}>
       <Dialog.Backdrop />
       <Dialog.Positioner>
-        <Dialog.Content bg="#252a43" color="white" rounded="2xl" maxW="lg" overflow="hidden" boxShadow="0 24px 80px rgba(0, 0, 0, .45)">
+        <Dialog.Content
+          bg="#252a43"
+          color="white"
+          w={{ base: '100vw', md: 'auto' }}
+          h="auto"
+          maxH="100dvh"
+          maxW={{ base: '100vw', md: 'lg' }}
+          rounded={{ base: 'none', md: '2xl' }}
+          overflow="hidden"
+          boxShadow="0 24px 80px rgba(0, 0, 0, .45)"
+        >
           <Dialog.Header>
             <HStack gap={3}>
               <Box p={2} rounded="lg" bg="cyan.400" color="gray.900">
@@ -97,11 +107,6 @@ export const ExportDialog = ({
               </Button>
             </Box>
           </Dialog.Body>
-          <Dialog.Footer>
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-          </Dialog.Footer>
         </Dialog.Content>
       </Dialog.Positioner>
     </Dialog.Root>

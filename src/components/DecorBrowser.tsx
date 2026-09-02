@@ -122,8 +122,8 @@ export function DecorBrowser({
 
   return (
     <Box
-      w="sm"
-      h="full"
+      w={{ base: '100vw', md: 'sm' }}
+      h="100dvh"
       position="relative"
       color="white"
       p={4}
