@@ -1,5 +1,5 @@
 //pixiCanvas.tsx
-import { Application, extend } from '@pixi/react'
+import { Application, extend, useApplication } from '@pixi/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Assets,
@@ -9,6 +9,7 @@ import {
   Point,
   Rectangle,
   Texture,
+  type Application as PixiApplication,
   type FederatedPointerEvent,
 } from 'pixi.js'
 import layoutImg from '../../assets/crk_layout/crk_layout.png'
@@ -19,6 +20,7 @@ import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, TINY_PER_SMALL } from '@
 import { HoverHighlight } from './HoverHighlight'
 import { useHistoryState } from '../../hooks/useHistoryState'
 import { useKingdomStore } from '../../store/kingdomStore'
+import { downloadCanvasAsPng, getLayoutExportFilename } from '../../utils/exportLayout'
 
 extend({
   Container,
@@ -34,6 +36,7 @@ const ZOOM_EPSILON = 0.001
 
 const CLICK_MOVE_THRESHOLD = 10
 const ZOOM_BUTTON_STEP = 0.15
+const EXPORT_RESOLUTION = 2
 
 const IMG_ANCHOR_PX = { x: 2160, y: 695 }
 
@@ -145,9 +148,20 @@ type PixiCanvasProps = {
     canRedo: boolean
   }) => void
   onZoomControlsReady?: (controls: { zoomIn: () => void; zoomOut: () => void }) => void
+  onExportReady?: (exportLayout: () => Promise<void>) => void
 }
 
-export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady }: PixiCanvasProps) => {
+const ApplicationBridge = ({ onReady }: { onReady: (app: PixiApplication) => void }) => {
+  const { app } = useApplication()
+
+  useEffect(() => {
+    onReady(app)
+  }, [app, onReady])
+
+  return null
+}
+
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady, onExportReady }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -161,6 +175,8 @@ export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryC
   const [isDragging, setIsDragging] = useState(false)
   const [viewportSize, setViewportSize] = useState<Viewport>(viewportRef.current)
   const [bgTexture, setBgTexture] = useState<Texture | null>(null)
+  const [application, setApplication] = useState<PixiApplication | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
 const persistedItems = useKingdomStore((state) => state.items)
@@ -356,6 +372,47 @@ useEffect(() => {
 
   const zoomIn = useCallback(() => zoomTo(zoomRef.current + ZOOM_BUTTON_STEP), [zoomTo])
   const zoomOut = useCallback(() => zoomTo(zoomRef.current - ZOOM_BUTTON_STEP), [zoomTo])
+
+  const exportLayout = useCallback(async () => {
+    const container = containerRef.current
+    if (!application || !container || !coverLayout || !bgTexture) {
+      throw new Error('La scène Pixi n’est pas prête à être exportée.')
+    }
+
+    setIsExporting(true)
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+
+    const previousX = container.position.x
+    const previousY = container.position.y
+    const previousScaleX = container.scale.x
+    const previousScaleY = container.scale.y
+    const contentWidth = bgTexture.width * coverLayout.scale
+    const contentHeight = bgTexture.height * coverLayout.scale
+    const contentX = coverLayout.centerX - contentWidth / 2
+    const contentY = coverLayout.centerY - contentHeight / 2
+
+    try {
+      container.position.set(0, 0)
+      container.scale.set(1)
+
+      const canvas = application.renderer.extract.canvas({
+        target: container,
+        frame: new Rectangle(contentX, contentY, contentWidth, contentHeight),
+        resolution: EXPORT_RESOLUTION / coverLayout.scale,
+        antialias: true,
+      })
+
+      await downloadCanvasAsPng(canvas, getLayoutExportFilename())
+    } finally {
+      container.position.set(previousX, previousY)
+      container.scale.set(previousScaleX, previousScaleY)
+      setIsExporting(false)
+    }
+  }, [application, bgTexture, coverLayout])
+
+  useEffect(() => {
+    onExportReady?.(exportLayout)
+  }, [exportLayout, onExportReady])
 
   useEffect(() => {
     onZoomControlsReady?.({ zoomIn, zoomOut })
@@ -795,6 +852,7 @@ useEffect(() => {
         preference="webgl"
         powerPreference="high-performance"
       >
+        <ApplicationBridge onReady={setApplication} />
         <pixiContainer
           ref={setContainer}
           eventMode="static"
@@ -825,15 +883,15 @@ useEffect(() => {
                 smallScale={smallScale}
                 smallTileWidth={smallTileWidth}
                 smallTileHeight={smallTileHeight}
-                selectedPlacedId={selectedPlacedId}
+                selectedPlacedId={isExporting ? null : selectedPlacedId}
                 onSelectPlaced={handleSelectPlaced}
                 onDragStart={handleDragStartPlaced}
                 onDeletePlaced={handleDeletePlaced}
-                interactive={!selectedDecoration}
+                interactive={!selectedDecoration && !isExporting}
               />
             </>
           )}
-          {coverLayout && selectedDecoration && (
+          {coverLayout && selectedDecoration && !isExporting && (
             <HoverHighlight
               hoverCell={hoverCell}
               sizeInSmallTiles={parseSizeToSmallTiles(selectedDecoration.size)}
