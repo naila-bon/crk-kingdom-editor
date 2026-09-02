@@ -62,6 +62,15 @@ export function useHistoryState<T>(initial: T, maxHistory = 100) {
     setHistory((h) => ({ ...h, pendingBefore: null }))
   }, [])
 
+  const replace = useCallback((next: T) => {
+    setHistory({
+      present: next,
+      undoStack: [],
+      redoStack: [],
+      pendingBefore: null,
+    })
+  }, [])
+
   // Une seule transition atomique par undo/redo : pas de setState imbriqués,
   // tout est calculé dans le même updater à partir du même snapshot `h`.
   // C'est ce qui rend les appuis rapprochés (Ctrl+Z x3 vite) fiables :
@@ -100,6 +109,7 @@ export function useHistoryState<T>(initial: T, maxHistory = 100) {
     beginInteraction,
     commitInteraction,
     cancelInteraction,
+    replace,
     undo,
     redo,
     canUndo: history.undoStack.length > 0,
