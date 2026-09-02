@@ -4,7 +4,6 @@ import { Download, Eye, FileUp, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { ExportDialog } from './components/ExportDialog'
 import { HelpDialog } from './components/HelpDialog'
-import { ExportDialog } from './components/ExportDialog'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
 import layoutImage from 'src/assets/crk_layout/crk_layout.png'
 
