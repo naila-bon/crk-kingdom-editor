@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { PixiCanvas } from './components/Canvas/PixiCanvas'
 import layoutImage from 'src/assets/crk_layout/crk_layout.png'
-import { Eye, Plus, Minus, Undo2, Redo2 } from 'lucide-react'
+import { Download, Eye, Plus, Minus, Undo2, Redo2 } from 'lucide-react'
 import { HelpDialog } from './components/HelpDialog'
 
 type Decoration = {
@@ -28,9 +28,15 @@ function App() {
   const [selectedDecoration, setSelectedDecoration] = useState<Decoration | null>(null)
   const [history, setHistory] = useState<HistoryInfo | null>(null)
   const [zoomControls, setZoomControls] = useState<{ zoomIn: () => void; zoomOut: () => void } | null>(null)
+  const [exportLayout, setExportLayout] = useState<(() => Promise<void>) | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
 
   const handleHistoryChange = useCallback((info: HistoryInfo) => {
     setHistory(info)
+  }, [])
+
+  const handleExportReady = useCallback((exporter: () => Promise<void>) => {
+    setExportLayout(() => exporter)
   }, [])
   return (
     <Box
@@ -55,6 +61,7 @@ function App() {
           onExitPlacementMode={() => setSelectedDecoration(null)}
           onHistoryChange={handleHistoryChange}
           onZoomControlsReady={setZoomControls}
+          onExportReady={handleExportReady}
         />
       </Box>
   {/* Undo / Redo controls, top-left */}
@@ -75,6 +82,22 @@ function App() {
           disabled={!history?.canRedo}
         >
           <Redo2 />
+        </IconButton>
+        <IconButton
+          aria-label="Export layout as PNG"
+          size="sm"
+          onClick={async () => {
+            if (!exportLayout) return
+            setIsExporting(true)
+            try {
+              await exportLayout()
+            } finally {
+              setIsExporting(false)
+            }
+          }}
+          disabled={!exportLayout || isExporting}
+        >
+          <Download />
         </IconButton>
       </Box>
       {/* Help button, top-right (avant la sidebar, ou ajuste selon ton layout) */}
