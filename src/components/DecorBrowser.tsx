@@ -257,6 +257,7 @@ export function DecorBrowser({
                   <Button
                     size="xs"
                     variant="outline"
+                    color="whiteAlpha.600"
                     rounded="full"
                     borderColor="whiteAlpha.300"
                     bg={surfaceBg}
