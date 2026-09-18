@@ -1,6 +1,6 @@
 import { Box, IconButton, Text } from '@chakra-ui/react'
 import { useCallback, useRef, useState } from 'react'
-import { Download, Eye, FileUp, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
+import { Download, Eye, FileUp, Minus, Plus, Redo2, Trash2, Undo2 } from 'lucide-react'
 import { DecorBrowser } from './components/DecorBrowser'
 import { ExportDialog } from './components/ExportDialog'
 import { HelpDialog } from './components/HelpDialog'
@@ -18,6 +18,7 @@ function App() {
   const [exportPng, setExportPng] = useState<(() => Promise<void>) | null>(null)
   const [exportSvg, setExportSvg] = useState<(() => void) | null>(null)
   const [importSvg, setImportSvg] = useState<((content: string) => void) | null>(null)
+  const [selectionActions, setSelectionActions] = useState<{ count: number; remove: () => void } | null>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
@@ -45,13 +46,16 @@ function App() {
   return (
     <Box position="relative" minH="100vh" overflow="hidden" bgImage={`url(${layoutImage})`} bgSize="contain" bgRepeat="no-repeat">
       <Box data-map-area="true" position="absolute" inset={0} overflow="hidden" zIndex={0}>
-        <PixiCanvas selectedDecoration={selectedDecoration} onExitPlacementMode={() => setSelectedDecoration(null)} onHistoryChange={handleHistoryChange} onZoomControlsReady={handleZoomControlsReady} onExportReady={handleExportReady} onExportSvgReady={handleExportSvgReady} onImportSvgReady={handleImportSvgReady} />
+        <PixiCanvas selectedDecoration={selectedDecoration} onExitPlacementMode={() => setSelectedDecoration(null)} onHistoryChange={handleHistoryChange} onZoomControlsReady={handleZoomControlsReady} onExportReady={handleExportReady} onExportSvgReady={handleExportSvgReady} onImportSvgReady={handleImportSvgReady} onSelectionActionsReady={setSelectionActions} />
       </Box>
       <Box position="absolute" top={4} left={4} zIndex={3} display="flex" gap={2} pointerEvents="auto">
         <IconButton aria-label="Undo" size="sm" onClick={() => history?.undo()} disabled={!history?.canUndo}><Undo2 /></IconButton>
         <IconButton aria-label="Redo" size="sm" onClick={() => history?.redo()} disabled={!history?.canRedo}><Redo2 /></IconButton>
         <IconButton aria-label="Choose export format" size="sm" onClick={() => setExportDialogOpen(true)} disabled={!exportPng && !exportSvg}><Download /></IconButton>
         <IconButton aria-label="Import layout from SVG" size="sm" onClick={() => importInputRef.current?.click()} disabled={!importSvg}><FileUp /></IconButton>
+        {selectionActions && selectionActions.count > 0 && (
+          <IconButton aria-label="Supprimer la sélection" title="Supprimer la sélection" size="sm" colorPalette="red" onClick={selectionActions.remove}><Trash2 /></IconButton>
+        )}
         <input ref={importInputRef} type="file" accept=".svg,image/svg+xml" hidden onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ''; if (!file || !importSvg) return; try { setImportError(null); importSvg(await file.text()) } catch (error) { setImportError(error instanceof Error ? error.message : 'Impossible d’importer ce fichier SVG.') } }} />
       </Box>
       <ExportDialog
