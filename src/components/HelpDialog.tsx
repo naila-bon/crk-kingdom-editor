@@ -46,8 +46,16 @@ const sections: HelpSection[] = [
                 description: 'Drag placed decorations to move them.',
             },
             {
+                label: 'Multi-select',
+                description: 'Hold Shift and click to select several decorations.',
+            },
+            {
                 label: 'Delete',
-                description: 'Select a decoration and press Delete.',
+                description: 'Delete only removes the selected decorations.',
+            },
+            {
+                label: 'Clear selection',
+                description: 'Press Escape to clear the selection; use the selection button to remove it.',
             },
         ],
     },

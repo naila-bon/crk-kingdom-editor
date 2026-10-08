@@ -20,8 +20,8 @@ type DecorationsLayerProps = {
   smallScale: number
   smallTileWidth: number
   smallTileHeight: number
-  selectedPlacedId: string | null
-  onSelectPlaced: (id: string) => void
+  selectedPlacedIds: string[]
+  onSelectPlaced: (id: string, additive: boolean) => void
   onDragStart: (id: string) => void
   onDeletePlaced: (id: string) => void
   interactive: boolean
@@ -35,7 +35,7 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
   smallScale,
   smallTileWidth,
   smallTileHeight,
-  selectedPlacedId,
+  selectedPlacedIds,
   onSelectPlaced,
   onDragStart,
   onDeletePlaced,
@@ -125,7 +125,7 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
         const spriteLeft = x - displayWidth / 2
         const spriteTop = y - anchorY * displayHeight
 
-        const isSelected = deco.id === selectedPlacedId
+        const isSelected = selectedPlacedIds.includes(deco.id)
 
         // Position du bouton de suppression : coin haut-droit de la
         // bounding box du sprite, légèrement décalé vers l'extérieur.
@@ -146,7 +146,7 @@ export const DecorationsLayer: FC<DecorationsLayerProps> = ({
                 interactive
                   ? (event: FederatedPointerEvent) => {
                       event.stopPropagation()
-                      onSelectPlaced(deco.id)
+                      onSelectPlaced(deco.id, event.shiftKey)
                       onDragStart(deco.id)
                     }
                   : undefined

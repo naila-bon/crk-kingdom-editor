@@ -16,7 +16,7 @@ import layoutImg from '../../assets/crk_layout/crk_layout.png'
 import { Grid, isFootprintInMask } from './Grid'
 import { DecorationsLayer } from './DecorationsLayer'
 import type { PlacedDecoration } from '../../types/decorations'
-import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, TINY_PER_SMALL } from '@/utils/gridUtils'
+import { TILE_HEIGHT, TILE_WIDTH, getSmallTileGeometry, isoToScreen, TINY_PER_SMALL } from '@/utils/gridUtils'
 import { HoverHighlight } from './HoverHighlight'
 import { useHistoryState } from '../../hooks/useHistoryState'
 import { useKingdomStore } from '../../store/kingdomStore'
@@ -38,6 +38,7 @@ const ZOOM_EPSILON = 0.001
 const CLICK_MOVE_THRESHOLD = 10
 const ZOOM_BUTTON_STEP = 0.15
 const EXPORT_RESOLUTION = 2
+const SELECTION_MODE: 'contained' | 'intersecting' = 'contained'
 
 const IMG_ANCHOR_PX = { x: 2160, y: 695 }
 
@@ -152,6 +153,7 @@ type PixiCanvasProps = {
   onExportReady?: (exportLayout: () => Promise<void>) => void
   onExportSvgReady?: (exportLayout: () => void) => void
   onImportSvgReady?: (importLayout: (content: string) => void) => void
+  onSelectionActionsReady?: (actions: { count: number; remove: () => void }) => void
 }
 
 const ApplicationBridge = ({ onReady }: { onReady: (app: PixiApplication) => void }) => {
@@ -164,7 +166,7 @@ const ApplicationBridge = ({ onReady }: { onReady: (app: PixiApplication) => voi
   return null
 }
 
-export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady, onExportReady, onExportSvgReady, onImportSvgReady }: PixiCanvasProps) => {
+export const PixiCanvas = ({ selectedDecoration, onExitPlacementMode, onHistoryChange, onZoomControlsReady, onExportReady, onExportSvgReady, onImportSvgReady, onSelectionActionsReady }: PixiCanvasProps) => {
   const cameraRef = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const zoomTargetRef = useRef(1)
@@ -220,9 +222,22 @@ useEffect(() => {
   onHistoryChange?.({ undo: undoDecorations, redo: redoDecorations, canUndo, canRedo })
 }, [onHistoryChange, undoDecorations, redoDecorations, canUndo, canRedo])
 
+  useEffect(() => {
+    if (!selectedDecoration) return
+    selectionRectRef.current = null
+    setSelectionRect(null)
+    setSelectedPlacedIds([])
+  }, [selectedDecoration])
+
   const [hoverCell, setHoverCell] = useState<{ col: number; row: number } | null>(null)
-  const [selectedPlacedId, setSelectedPlacedId] = useState<string | null>(null)
-  const draggingPlacedRef = useRef<{ id: string; moved: boolean } | null>(null)
+  const [selectedPlacedIds, setSelectedPlacedIds] = useState<string[]>([])
+  const selectionRectRef = useRef<{ startX: number; startY: number } | null>(null)
+  const [selectionRect, setSelectionRect] = useState<Rectangle | null>(null)
+  const draggingPlacedRef = useRef<{
+    ids: string[]
+    startPositions: Map<string, { col: number; row: number }>
+    moved: boolean
+  } | null>(null)
 
   useEffect(() => {
     Assets.load(layoutImg).then((tex: Texture) => setBgTexture(tex))
@@ -432,7 +447,7 @@ useEffect(() => {
   const importSvg = useCallback((content: string) => {
     const items = parseLayoutSvg(content)
     replaceDecorations(items)
-    setSelectedPlacedId(null)
+    setSelectedPlacedIds([])
     onExitPlacementMode?.()
   }, [onExitPlacementMode, replaceDecorations])
 
@@ -539,7 +554,7 @@ useEffect(() => {
   }, [])
 
   const handlePlaceClick = useCallback((globalX: number, globalY: number) => {
-    setSelectedPlacedId(null)
+    setSelectedPlacedIds([])
     if (!coverLayout || !selectedDecoration) return
 
     const coords = screenToGridCoords(
@@ -603,12 +618,18 @@ useEffect(() => {
     dragRef.current.y = event.global.y
     pointerDownRef.current.x = event.global.x
     pointerDownRef.current.y = event.global.y
+    if (event.shiftKey && !selectedDecoration && containerRef.current) {
+      const local = containerRef.current.toLocal(new Point(event.global.x, event.global.y))
+      selectionRectRef.current = { startX: local.x, startY: local.y }
+      setSelectionRect(new Rectangle(local.x, local.y, 0, 0))
+      dragRef.current.active = false
+    }
     setIsDragging(true)
-  }, [stopZoomAnimation])
+  }, [selectedDecoration, stopZoomAnimation])
 
   const stopPan = useCallback((event: FederatedPointerEvent) => {
     if (draggingPlacedRef.current) {
-      const { id, moved } = draggingPlacedRef.current
+      const { ids, startPositions, moved } = draggingPlacedRef.current
       draggingPlacedRef.current = null
 
       if (!moved) {
@@ -616,14 +637,47 @@ useEffect(() => {
         return
       }
 
-      const deco = placedDecorations.find((d) => d.id === id)
-      if (deco && !isFootprintInMask(deco.col, deco.row, deco.widthInSmallTiles)) {
+      const movedDecorations = placedDecorations.filter((deco) => ids.includes(deco.id))
+      if (movedDecorations.some((deco) => !isFootprintInMask(deco.col, deco.row, deco.widthInSmallTiles))) {
         cancelDecorInteraction()
-        setPlacedDecorationsLive((prev) => prev.filter((d) => d.id !== id))
+        setPlacedDecorationsLive((prev) => prev.map((deco) => {
+          const original = startPositions.get(deco.id)
+          return original ? { ...deco, ...original } : deco
+        }))
         return
       }
 
       commitDecorInteraction()
+      return
+    }
+
+    if (selectionRectRef.current && containerRef.current && coverLayout) {
+      const local = containerRef.current.toLocal(new Point(event.global.x, event.global.y))
+      const start = selectionRectRef.current
+      const nextRect = new Rectangle(
+        Math.min(start.startX, local.x),
+        Math.min(start.startY, local.y),
+        Math.abs(local.x - start.startX),
+        Math.abs(local.y - start.startY),
+      )
+      selectionRectRef.current = null
+      setSelectionRect(null)
+      if (nextRect.width > 2 || nextRect.height > 2) {
+        const ids = placedDecorations.filter((deco) => {
+          const center = isoToScreen(deco.col, deco.row, coverLayout.anchorWorldX, coverLayout.anchorWorldY, smallScale)
+          const width = deco.widthInSmallTiles * smallTileWidth
+          const height = deco.widthInSmallTiles * smallTileHeight
+          const bounds = new Rectangle(center.x - width / 2, center.y - height / 2, width, height)
+          return SELECTION_MODE === 'contained'
+            ? nextRect.contains(bounds.x, bounds.y) && nextRect.contains(bounds.right, bounds.bottom)
+            : nextRect.intersects(bounds)
+        }).map((deco) => deco.id)
+        setSelectedPlacedIds((current) => event.shiftKey ? [...new Set([...current, ...ids])] : ids)
+      } else if (!event.shiftKey) {
+        setSelectedPlacedIds([])
+      }
+      dragRef.current.active = false
+      setIsDragging(false)
       return
     }
 
@@ -640,10 +694,22 @@ useEffect(() => {
     if (movedDistance <= CLICK_MOVE_THRESHOLD) {
       handlePlaceClick(event.global.x, event.global.y)
     }
-  }, [handlePlaceClick, placedDecorations, cancelDecorInteraction, commitDecorInteraction, setPlacedDecorationsLive])
+  }, [handlePlaceClick, placedDecorations, cancelDecorInteraction, commitDecorInteraction, setPlacedDecorationsLive, coverLayout, smallScale, smallTileWidth, smallTileHeight])
 
   const updatePan = useCallback((event: FederatedPointerEvent) => {
     updateHover(event.global.x, event.global.y)
+
+    if (selectionRectRef.current && containerRef.current) {
+      const local = containerRef.current.toLocal(new Point(event.global.x, event.global.y))
+      const start = selectionRectRef.current
+      setSelectionRect(new Rectangle(
+        Math.min(start.startX, local.x),
+        Math.min(start.startY, local.y),
+        Math.abs(local.x - start.startX),
+        Math.abs(local.y - start.startY),
+      ))
+      return
+    }
 
     if (draggingPlacedRef.current && coverLayout) {
       draggingPlacedRef.current.moved = true
@@ -659,8 +725,12 @@ useEffect(() => {
 
       setPlacedDecorationsLive((prev) =>
         prev.map((deco) =>
-          deco.id === draggingPlacedRef.current?.id
-            ? { ...deco, col: coords.col, row: coords.row }
+          draggingPlacedRef.current?.ids.includes(deco.id)
+            ? {
+                ...deco,
+                col: draggingPlacedRef.current.startPositions.get(deco.id)!.col + coords.col - draggingPlacedRef.current.startPositions.get(draggingPlacedRef.current.ids[0])!.col,
+                row: draggingPlacedRef.current.startPositions.get(deco.id)!.row + coords.row - draggingPlacedRef.current.startPositions.get(draggingPlacedRef.current.ids[0])!.row,
+              }
             : deco,
         ),
       )
@@ -697,20 +767,39 @@ useEffect(() => {
     setHoverCell(null)
   }, [stopPan])
 
-  const handleSelectPlaced = useCallback((id: string) => {
-    setSelectedPlacedId(id)
+  const handleSelectPlaced = useCallback((id: string, additive: boolean) => {
+    setSelectedPlacedIds((current) => additive
+      ? (current.includes(id) ? current.filter((value) => value !== id) : [...current, id])
+      : [id])
   }, [])
 
   const handleDeletePlaced = useCallback((id: string) => {
     commitPlacedDecorations((prev) => prev.filter((d) => d.id !== id))
-    setSelectedPlacedId(null)
+    setSelectedPlacedIds((current) => current.filter((value) => value !== id))
   }, [commitPlacedDecorations])
+
+  const removeSelectedPlaced = useCallback(() => {
+    if (selectedPlacedIds.length === 0) return
+    commitPlacedDecorations((prev) => prev.filter((deco) => !selectedPlacedIds.includes(deco.id)))
+    setSelectedPlacedIds([])
+  }, [commitPlacedDecorations, selectedPlacedIds])
+
+  useEffect(() => {
+    onSelectionActionsReady?.({ count: selectedPlacedIds.length, remove: removeSelectedPlaced })
+  }, [onSelectionActionsReady, removeSelectedPlaced, selectedPlacedIds.length])
 
   const handleDragStartPlaced = useCallback((id: string) => {
     dragRef.current.active = false
-    draggingPlacedRef.current = { id, moved: false }
+    const ids = selectedPlacedIds.includes(id) ? selectedPlacedIds : [id]
+    const startPositions = new Map(
+      placedDecorations
+        .filter((deco) => ids.includes(deco.id))
+        .map((deco) => [deco.id, { col: deco.col, row: deco.row }]),
+    )
+    draggingPlacedRef.current = { ids, startPositions, moved: false }
+    setSelectedPlacedIds(ids)
     beginDecorInteraction()
-  }, [beginDecorInteraction])
+  }, [beginDecorInteraction, placedDecorations, selectedPlacedIds])
 
   useEffect(() => {
     centerWorld()
@@ -854,19 +943,21 @@ useEffect(() => {
         return
       }
 
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPlacedId) {
-        commitPlacedDecorations((prev) => prev.filter((d) => d.id !== selectedPlacedId))
-        setSelectedPlacedId(null)
+      if (!selectedDecoration && (event.key === 'Delete' || event.key === 'Backspace')) {
+        if (selectedPlacedIds.length === 0) return
+        event.preventDefault()
+        commitPlacedDecorations((prev) => prev.filter((d) => !selectedPlacedIds.includes(d.id)))
+        setSelectedPlacedIds([])
       }
       if (event.key === 'Escape') {
-        setSelectedPlacedId(null)
+        setSelectedPlacedIds([])
         onExitPlacementMode?.()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedPlacedId, commitPlacedDecorations, undoDecorations, redoDecorations, onExitPlacementMode])
+  }, [selectedDecoration, selectedPlacedIds, commitPlacedDecorations, undoDecorations, redoDecorations, onExitPlacementMode])
 
   return (
     <div
@@ -906,6 +997,16 @@ useEffect(() => {
           {coverLayout && (
             <>
               <Grid offsetX={coverLayout.anchorWorldX} offsetY={coverLayout.anchorWorldY} coverScale={coverLayout.scale} />
+              {selectionRect && !isExporting && (
+                <pixiGraphics
+                  draw={(graphics) => {
+                    graphics.clear()
+                    graphics.rect(selectionRect.x, selectionRect.y, selectionRect.width, selectionRect.height)
+                    graphics.fill({ color: 0x38bdf8, alpha: 0.16 })
+                    graphics.stroke({ width: 1.5, color: 0x38bdf8, alpha: 0.9 })
+                  }}
+                />
+              )}
               <DecorationsLayer
                 placed={placedDecorations}
                 offsetX={coverLayout.anchorWorldX}
@@ -913,7 +1014,7 @@ useEffect(() => {
                 smallScale={smallScale}
                 smallTileWidth={smallTileWidth}
                 smallTileHeight={smallTileHeight}
-                selectedPlacedId={isExporting ? null : selectedPlacedId}
+                selectedPlacedIds={isExporting ? [] : selectedPlacedIds}
                 onSelectPlaced={handleSelectPlaced}
                 onDragStart={handleDragStartPlaced}
                 onDeletePlaced={handleDeletePlaced}
