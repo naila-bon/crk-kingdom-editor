@@ -17,7 +17,7 @@ import {
 
 import { EyeClosed, ArrowLeft } from 'lucide-react'
 
-import decorations from '../../scripts/decorations.json'
+import decorations from '../../scripts/data/decorations.json'
 
 type Decoration = {
   name: string

@@ -40,4 +40,6 @@ public/           # Static public assets
 
 ## Disclaimer
 
-This is a fan-made tool and is not affiliated with **Devsisters** or **Cookie Run: Kingdom**. Game names, images, and other assets belong to their respective owners.
+Decoration data is sourced from the [Cookie Run Wiki](https://cookierun.wiki). Original **Cookie Run: Kingdom** images and game assets are © **Devsisters** and belong to their respective owners.
+
+This is a fan-made tool and is not affiliated with **Devsisters** or **Cookie Run: Kingdom**.
