@@ -155,6 +155,24 @@ export const HelpDialog = () => {
                                 </Box>
                             ))}
                             <Box>
+                                <Text fontSize="sm" fontWeight="bold" color="cyan.300" mb={2}>
+                                    Credits
+                                </Text>
+                                <Text fontSize="sm" color="whiteAlpha.800">
+                                    Decoration data sourced from the{' '}
+                                    <Link
+                                        href="https://cookierun.wiki"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        color="cyan.300"
+                                        textDecoration="underline"
+                                    >
+                                        Cookie Run Wiki
+                                    </Link>
+                                    . Original Cookie Run: Kingdom images and game assets are © Devsisters.
+                                </Text>
+                            </Box>
+                            <Box>
                                 <Text
                                     fontSize="sm"
                                     fontWeight="bold"
